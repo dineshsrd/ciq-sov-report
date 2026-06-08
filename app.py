@@ -674,20 +674,59 @@ if rep.get("mode") == "deepdive" and focus_brand:
                     "Try expanding the date range or switching to 'All categories'.")
         else:
             sku_opts = asins_df["sku"].tolist()
-            sku_titles = {
-                r["sku"]: f"{r['sku']}  —  {str(r.get('title', ''))[:55]}"
+            # Build a per-SKU info dict for the product card
+            sku_info = {
+                r["sku"]: {
+                    "title": str(r.get("title", "") or ""),
+                    "image_url": str(r.get("image_url", "") or ""),
+                    "product_page_url": str(r.get("product_page_url", "") or ""),
+                    "keywords": int(r.get("keywords", 0) or 0),
+                    "best_rank": int(r.get("best_rank", 0) or 0),
+                    "page1_hits": int(r.get("page1_hits", 0) or 0),
+                }
                 for _, r in asins_df.iterrows()
             }
+
             sel_sku = st.selectbox(
                 "Choose an ASIN to optimize", sku_opts,
-                format_func=lambda s: sku_titles.get(s, s),
+                format_func=lambda s: (
+                    f"{s}  —  {sku_info.get(s, {}).get('title', '')[:60]}"),
                 key="opt_sku_sel")
 
-            if st.button("✨ Optimize this listing", key="sku_opt_btn",
+            # ── Product card ────────────────────────────────────────────
+            info = sku_info.get(sel_sku, {})
+            c_img, c_text = st.columns([1, 4])
+            with c_img:
+                img = info.get("image_url", "")
+                if img:
+                    st.image(img, width=130)
+                else:
+                    st.markdown(
+                        "<div style='width:130px;height:130px;background:#ece4f5;"
+                        "border-radius:8px;display:flex;align-items:center;"
+                        "justify-content:center;font-size:2.5rem;'>📦</div>",
+                        unsafe_allow_html=True)
+            with c_text:
+                product_title = info.get("title", sel_sku)
+                url = info.get("product_page_url", "")
+                link = (f' <a href="{url}" target="_blank" '
+                        f'style="color:#5AAFFE;font-size:.82em">↗ View on Amazon</a>'
+                        if url else "")
+                st.markdown(
+                    f"<p style='font-weight:600;margin:0 0 6px'>"
+                    f"{product_title[:160]}</p>{link}",
+                    unsafe_allow_html=True)
+                st.caption(
+                    f"ASIN: `{sel_sku}` &nbsp;·&nbsp; "
+                    f"Keywords tracked: **{info.get('keywords', 0)}** &nbsp;·&nbsp; "
+                    f"Best rank: **#{info.get('best_rank', '—')}** &nbsp;·&nbsp; "
+                    f"Page-1 appearances: **{info.get('page1_hits', 0)}**")
+            st.markdown("")
+
+            if st.button("✨ Optimize listing title & content", key="sku_opt_btn",
                          type="primary", use_container_width=False):
                 with st.spinner("Pulling keyword data and generating recommendations…"):
-                    sel_row = asins_df[asins_df["sku"] == sel_sku].iloc[0]
-                    current_title = str(sel_row.get("title", "") or "")
+                    current_title = info.get("title", "")
 
                     # Page-1 keywords for this ASIN
                     kw_df = _sku_kws(cid, sel_sku)

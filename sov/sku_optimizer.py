@@ -60,23 +60,31 @@ def _openai_optimize(sku, current_title, brand, category, ranking_kws,
     }
 
     system = (
-        "You are an Amazon listing optimization expert at CommerceIQ. "
-        "Optimize the product listing for maximum discoverability on Amazon search "
-        "AND on Rufus (Amazon's AI shopping assistant).\n\n"
+        "You are an Amazon search-rank optimization expert at CommerceIQ. "
+        "Your ONLY goal is to improve this product's Amazon search rank — "
+        "helping it appear higher (ideally page 1, position 1–3) for the "
+        "provided target keywords. You do this by crafting listing copy that "
+        "maximises Amazon A10 index weight: exact-match primary keyword first, "
+        "high-value secondary keywords woven in naturally, no filler words.\n\n"
         "Return a JSON object with EXACTLY these keys:\n"
-        "  'analysis': 2–3 sentences on what the current title misses and why.\n"
-        "  'optimized_title': New Amazon title. Rules: max 200 chars, "
-        "front-load brand + primary keyword, be specific (size/count/format "
-        "where inferable), readable prose — no keyword stuffing.\n"
-        "  'bullets': JSON array of exactly 5 strings. Each: start with a "
-        "benefit keyword in ALL CAPS, max 200 chars, embed 1–2 target keywords "
-        "naturally, shopper-facing not spec-driven.\n"
-        "  'backend_keywords': space-separated terms NOT already in title/bullets "
-        "— synonyms, long-tail variants, missing keywords. Max 249 bytes total.\n"
+        "  'analysis': 2–3 sentences. Explain which high-volume keywords the "
+        "current title fails to index for, and what the title change will do to "
+        "rank for those terms.\n"
+        "  'optimized_title': Rewritten Amazon title. Hard rules: ≤200 chars; "
+        "Brand name first, then the exact primary keyword phrase, then the most "
+        "important differentiator; be specific (pack size / count / format where "
+        "inferable from context); readable as a sentence; NO keyword stuffing.\n"
+        "  'bullets': JSON array of exactly 5 strings. Each: ALL-CAPS benefit "
+        "hook (3–5 words), dash, then shopper-facing sentence that embeds "
+        "1–2 target keywords. Max 200 chars each.\n"
+        "  'backend_keywords': Single space-separated string of search terms "
+        "NOT already present in title/bullets — prioritise the "
+        "'missing_high_volume_keywords' list. Max 249 bytes total.\n"
         "  'rufus_qa': JSON array of exactly 3 objects {\"q\": ..., \"a\": ...}. "
-        "Questions a shopper asks Rufus (e.g. 'Is this good for X?', "
-        "'How does this compare to Y?'). Answers ≤ 40 words, make the product shine.\n"
-        "Only use provided data — do not invent specs or claims."
+        "Questions Amazon Rufus shoppers ask (e.g. 'Is this good for X?', "
+        "'How does this compare to Y?'). Answers ≤40 words, concrete and "
+        "product-specific — Rufus surfaces these in conversational search.\n"
+        "Use only provided data — do not invent specs or claims."
     )
 
     resp = client.chat.completions.create(
@@ -133,10 +141,10 @@ def _template_optimize(sku, current_title, brand, category,
 
     return {
         "analysis": (
-            f"The current title '{current_title[:70].rstrip()}…' may not "
-            f"prominently feature the primary tracked keyword '{top_kw}'. "
-            "Front-loading the brand and top keyword in the first 80 characters "
-            "typically improves Amazon's index weight."
+            f"The current title doesn't front-load '{top_kw}', the highest "
+            f"page-1 keyword for this ASIN. Amazon's A10 algorithm weights "
+            "title position heavily — moving the primary keyword to characters "
+            "1–80 can lift rank without any ad spend increase."
         ),
         "optimized_title": opt_title,
         "bullets": [

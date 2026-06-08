@@ -432,6 +432,8 @@ def winning_asins_query(level: str | None) -> str:
     where = f"WHERE {_check_level(level)} = :catval" if level else ""
     return f"""
 SELECT s.sku, MAX(s.title) AS title,
+       MAX(s.image_url) AS image_url,
+       MAX(s.product_page_url) AS product_page_url,
        COUNT(DISTINCT s.search_term) AS keywords,
        MIN(s.overall_listing_rank) AS best_rank,
        SUM(CASE WHEN s.listing_page = 1 THEN 1 ELSE 0 END) AS page1_hits

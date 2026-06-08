@@ -309,7 +309,10 @@ def get_winning_asins(client_id: int, level: str | None,
     if sub.empty:
         return sub
     g = sub.groupby("sku", as_index=False).agg(
-        title=("title", "max"), keywords=("search_term", "nunique"),
+        title=("title", "max"),
+        image_url=("image_url", "max"),
+        product_page_url=("product_page_url", "max"),
+        keywords=("search_term", "nunique"),
         best_rank=("overall_listing_rank", "min"),
         page1_hits=("listing_page", lambda s: int((s == 1).sum())))
     return g.sort_values(["page1_hits", "best_rank"],
