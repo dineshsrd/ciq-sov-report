@@ -465,6 +465,50 @@ LIMIT 300
 
 
 # ── SKU optimizer queries ─────────────────────────────────────────────────
+def optimizable_skus_query(level: str | None) -> str:
+    """Focus-brand SKUs with the most ranking UPSIDE — they already appear for
+    category keywords but rank BELOW the top positions, so better listing copy
+    can lift them. Ordered by opportunity (reach x rank-gap). Excludes SKUs
+    that already rank top — optimizing a #1 listing is pointless.
+    """
+    where = f"WHERE {_check_level(level)} = :catval" if level else ""
+    return f"""
+WITH kw AS (
+  SELECT s.sku, s.search_term,
+         MIN(s.overall_listing_rank) AS best_rank,
+         MAX(CASE WHEN s.listing_page = 1 THEN 1 ELSE 0 END) AS on_p1
+  FROM {_S()} s
+  JOIN (SELECT client_id, search_term FROM {_M()} {where}
+        GROUP BY client_id, search_term) m
+    ON s.client_id = m.client_id AND s.search_term = m.search_term
+  WHERE s.client_id = :cid AND lower(trim(s.brand)) = lower(trim(:fbrand))
+    AND s.feed_date >= date_sub(current_date(), 14)
+    AND s.overall_listing_rank IS NOT NULL AND s.overall_listing_rank > 0
+  GROUP BY s.sku, s.search_term
+),
+info AS (
+  SELECT s.sku, MAX(s.title) AS title, MAX(s.image_url) AS image_url,
+         MAX(s.product_page_url) AS product_page_url
+  FROM {_S()} s
+  WHERE s.client_id = :cid AND lower(trim(s.brand)) = lower(trim(:fbrand))
+    AND s.feed_date >= date_sub(current_date(), 14)
+  GROUP BY s.sku
+)
+SELECT k.sku, i.title, i.image_url, i.product_page_url,
+       COUNT(*) AS keywords,
+       ROUND(AVG(k.best_rank), 1) AS avg_rank,
+       MIN(k.best_rank) AS best_rank,
+       SUM(k.on_p1) AS page1_kws,
+       slice(sort_array(collect_list(
+             named_struct('r', k.best_rank, 't', k.search_term))), 1, 10) AS kw_ranked
+FROM kw k JOIN info i USING (sku)
+GROUP BY k.sku, i.title, i.image_url, i.product_page_url
+HAVING COUNT(*) >= 1 AND AVG(k.best_rank) > 3
+ORDER BY (COUNT(*) * AVG(k.best_rank)) DESC
+LIMIT 6
+""".strip()
+
+
 def sku_keywords_query() -> str:
     """Keywords where a specific ASIN ranks on page 1 — used for listing opt."""
     return f"""

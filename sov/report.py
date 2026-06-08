@@ -298,6 +298,24 @@ section{padding:46px 0;border-bottom:1px solid var(--line)}
 .stats .v{font-size:22px;font-weight:800;margin-top:6px;letter-spacing:-.02em}
 .bandbar{height:14px;border-radius:6px;overflow:hidden;display:flex;margin:14px 0 6px}
 .bandbar i{height:100%}
+.skuopt{display:grid;gap:15px}
+.sku-card{display:grid;grid-template-columns:92px 1fr;gap:16px;background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:15px;overflow:hidden}
+.sku-img{width:92px;height:92px;border-radius:10px;overflow:hidden;background:var(--bg2);display:flex;align-items:center;justify-content:center;font-size:1.9rem}
+.sku-img img{width:100%;height:100%;object-fit:cover}
+.sku-main{min-width:0}
+.sku-meta{font-family:var(--mono);font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted2);margin-bottom:9px}
+.sku-meta b{color:var(--electric)}
+.sku-meta .asin{color:var(--muted)}
+.sku-before,.sku-after{margin-bottom:8px}
+.sku-before .lab,.sku-after .lab,.sku-targets .lab{font-family:var(--mono);font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted2);display:block;margin-bottom:3px}
+.sku-before p{font-size:13px;color:var(--muted);text-decoration:line-through;text-decoration-color:var(--muted2)}
+.sku-after p{font-size:14.5px;font-weight:700;color:var(--ink)}
+.sku-after .lab{color:var(--electric)}
+.sku-targets{margin:10px 0 8px}
+.chip{display:inline-block;font-size:11px;background:var(--bg2);color:var(--purple);border:1px solid var(--line);border-radius:100px;padding:3px 11px;margin:0 5px 5px 0;font-weight:600}
+.sku-why{display:flex;gap:9px;align-items:flex-start;background:var(--bg);border-left:3px solid var(--electric);border-radius:0 8px 8px 0;padding:8px 12px;font-size:13px;color:var(--muted)}
+.sku-why .ic{font-family:var(--mono);color:var(--electric);flex:none}
+.sku-why b{color:var(--ink)}
 .levers{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 .lever{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:22px;position:relative;overflow:hidden}
 .lever::before{content:"";position:absolute;left:0;top:0;right:0;height:4px}
@@ -535,6 +553,48 @@ def _incr_body(incr: dict) -> str:
     return stats + bandblock + kwcard
 
 
+def _sku_opt_cards(items: list[dict]) -> str:
+    """Cards for underperforming SKUs: thumbnail, current vs optimized title,
+    target keywords, and the ranking rationale."""
+    if not items:
+        return ""
+    out = ['<div class="skuopt">']
+    for it in items:
+        img = str(it.get("image_url", "") or "")
+        img_html = (f'<img src="{_html.escape(img)}" alt="">' if img.startswith("http")
+                    else "📦")
+        chips = "".join(f'<span class="chip">{_html.escape(str(t))}</span>'
+                        for t in (it.get("target_keywords") or []))
+        chips_html = (f'<div class="sku-targets"><span class="lab">Target keywords '
+                      f'(build the title to win these)</span>{chips}</div>'
+                      if chips else "")
+        avg = it.get("avg_rank", 0) or 0
+        url = str(it.get("product_page_url", "") or "")
+        asin_html = (f'<a href="{_html.escape(url)}" target="_blank" '
+                     f'style="color:var(--sky);text-decoration:none">{_html.escape(str(it["sku"]))} &#8599;</a>'
+                     if url.startswith("http") else _html.escape(str(it["sku"])))
+        cur = str(it.get("current_title", "") or "(no current title on record)")
+        opt = str(it.get("optimized_title", "") or "")
+        why = it.get("rationale", "")
+        out.append(
+            f'<div class="sku-card">'
+            f'<div class="sku-img">{img_html}</div>'
+            f'<div class="sku-main">'
+            f'<div class="sku-meta"><span class="asin">ASIN {asin_html}</span> &nbsp;·&nbsp; '
+            f'avg rank <b>#{avg:.1f}</b> &nbsp;·&nbsp; {it.get("keywords", 0)} keywords &nbsp;·&nbsp; '
+            f'{it.get("page1_kws", 0)} on page&nbsp;1</div>'
+            f'<div class="sku-before"><span class="lab">Current title</span>'
+            f'<p>{_html.escape(cur)}</p></div>'
+            f'<div class="sku-after"><span class="lab">Optimized title ✨ '
+            f'({len(opt)}/200 chars)</span><p>{_html.escape(opt)}</p></div>'
+            f'{chips_html}'
+            + (f'<div class="sku-why"><span class="ic">▌</span>'
+               f'<span>{_inl(why)}</span></div>' if why else "")
+            + '</div></div>')
+    out.append("</div>")
+    return "".join(out)
+
+
 def build_themed_report(scope: dict, ins: dict, d: dict,
                         narrative_source: str = "template") -> str:
     cat = str(scope.get("category_value", ""))
@@ -576,6 +636,13 @@ def build_themed_report(scope: dict, ins: dict, d: dict,
         secs.append(_section(f"{n:02d}", "Keyword Opportunities — Whitespace",
                              ins.get("keywords", ""),
                              _kwlines(d["whitespace"], "crawls", "your_sov", "your SOV")))
+        n += 1
+    if d.get("sku_opt") and d["sku_opt"].get("items"):
+        so = d["sku_opt"]
+        secs.append(_section(
+            f"{n:02d}", "SKU Optimization — Biggest Ranking Wins",
+            so.get("intro", ""), _sku_opt_cards(so["items"]),
+            note=ins.get("sku_opt", "")))
         n += 1
     if d.get("incr"):
         secs.append(_section(f"{n:02d}", "Ad Incrementality & Efficiency",

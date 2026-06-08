@@ -37,6 +37,155 @@ def optimize_sku(
             "template")
 
 
+# ── Report-embedded batch optimizer ───────────────────────────────────────
+def optimize_skus_for_report(
+    skus: list[dict],            # [{sku, title, avg_rank, best_rank, keywords,
+                                 #   page1_kws, current_keywords:[{term,rank}]}]
+    trending_keywords: list[str],  # high-demand category keywords to target
+    brand: str,
+    category: str,
+) -> tuple[list[dict], str]:
+    """Generate optimized titles for several underperforming SKUs in ONE pass,
+    for embedding directly in the report. Returns (items, source).
+
+    Each item: {sku, current_title, optimized_title, target_keywords:[str],
+                rationale, image_url, product_page_url, avg_rank, best_rank,
+                keywords, page1_kws}.
+    """
+    if not skus:
+        return [], "template"
+    if SETTINGS.openai_ready:
+        try:
+            return _openai_batch(skus, trending_keywords, brand, category), "openai"
+        except Exception:
+            pass
+    return _template_batch(skus, trending_keywords, brand, category), "template"
+
+
+def _openai_batch(skus, trending_keywords, brand, category) -> list[dict]:
+    from openai import OpenAI
+
+    client = OpenAI(api_key=SETTINGS.openai_api_key)
+
+    payload = {
+        "brand": brand,
+        "category": category,
+        "trending_category_keywords": [str(k) for k in trending_keywords[:15]],
+        "products": [
+            {
+                "sku": str(s["sku"]),
+                "current_title": str(s.get("title", "") or ""),
+                "avg_rank": round(float(s.get("avg_rank", 0) or 0), 1),
+                "best_rank": int(s.get("best_rank", 0) or 0),
+                "currently_ranks_for": [
+                    {"kw": str(k.get("term", "")), "rank": int(k.get("rank", 0) or 0)}
+                    for k in (s.get("current_keywords") or [])[:10]
+                ],
+            }
+            for s in skus
+        ],
+    }
+
+    system = (
+        "You are an Amazon search-rank optimization expert at CommerceIQ. "
+        f"For each {brand} product below, rewrite its listing title so it ranks "
+        "HIGHER on Amazon for the high-demand category keywords it is closest to "
+        "winning. Each product currently APPEARS for keywords but ranks below the "
+        "top positions — your rewrite must lift it.\n\n"
+        "For EACH product return an object with keys:\n"
+        "  'sku': echo the sku unchanged.\n"
+        "  'optimized_title': rewritten Amazon title. Rules: ≤200 chars; brand "
+        "first, then the single best target keyword phrase (exact match), then a "
+        "differentiator; specific (pack/size/format if inferable); reads as prose; "
+        "no keyword stuffing.\n"
+        "  'target_keywords': JSON array of 2–4 keywords (chosen from this "
+        "product's 'currently_ranks_for' and the 'trending_category_keywords') "
+        "that the new title is built to win.\n"
+        "  'rationale': ONE sentence — name the keyword(s) and current rank, and "
+        "what the title change does to lift it. Be concrete and specific to this "
+        "product, not generic.\n"
+        "Return JSON: {\"products\": [ ...one object per input product... ]}. "
+        "Use only provided data — invent no specs or claims."
+    )
+
+    resp = client.chat.completions.create(
+        model=SETTINGS.openai_model,
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user", "content": json.dumps(payload, default=str)},
+        ],
+        temperature=0.4,
+        max_tokens=1800,
+        response_format={"type": "json_object"},
+    )
+    raw = json.loads(resp.choices[0].message.content)
+    gen = raw.get("products", raw if isinstance(raw, list) else [])
+    by_sku = {str(g.get("sku")): g for g in gen if isinstance(g, dict)}
+
+    items: list[dict] = []
+    for s in skus:
+        g = by_sku.get(str(s["sku"]), {})
+        tk = g.get("target_keywords", [])
+        if isinstance(tk, str):
+            try:
+                tk = json.loads(tk)
+            except Exception:
+                tk = [t.strip() for t in tk.split(",") if t.strip()]
+        items.append(_assemble_item(
+            s,
+            optimized_title=str(g.get("optimized_title", "")).strip()[:200],
+            target_keywords=[str(t) for t in (tk or [])][:4],
+            rationale=str(g.get("rationale", "")).strip(),
+        ))
+    return items
+
+
+def _template_batch(skus, trending_keywords, brand, category) -> list[dict]:
+    trending_set = [str(k) for k in trending_keywords]
+    items = []
+    for s in skus:
+        ranks = s.get("current_keywords") or []
+        own_kws = [str(k.get("term", "")) for k in ranks]
+        # target = the keywords it's closest to winning + a trending one it lacks
+        target = own_kws[:2]
+        for tk in trending_set:
+            if tk not in own_kws and tk not in target:
+                target.append(tk)
+                break
+        target = target[:4]
+        primary = target[0] if target else category
+        base = str(s.get("title", "") or "")[:90].rsplit(" — ", 1)[0].strip()
+        opt = f"{brand} {primary.title()}"
+        if base and base.lower() not in opt.lower():
+            opt += f" — {base}"
+        opt = opt[:200]
+        worst = max(ranks, key=lambda k: k.get("rank", 0), default=None)
+        rationale = (
+            f"Currently ranks #{int(worst['rank'])} for '{worst['term']}'"
+            if worst else f"Underperforming on {category} keywords"
+        ) + f"; front-loading '{primary}' targets a top-of-page-1 position."
+        items.append(_assemble_item(s, optimized_title=opt,
+                                    target_keywords=target, rationale=rationale))
+    return items
+
+
+def _assemble_item(s: dict, optimized_title: str,
+                   target_keywords: list[str], rationale: str) -> dict:
+    return {
+        "sku": str(s["sku"]),
+        "current_title": str(s.get("title", "") or ""),
+        "optimized_title": optimized_title,
+        "target_keywords": target_keywords,
+        "rationale": rationale,
+        "image_url": str(s.get("image_url", "") or ""),
+        "product_page_url": str(s.get("product_page_url", "") or ""),
+        "avg_rank": float(s.get("avg_rank", 0) or 0),
+        "best_rank": int(s.get("best_rank", 0) or 0),
+        "keywords": int(s.get("keywords", 0) or 0),
+        "page1_kws": int(s.get("page1_kws", 0) or 0),
+    }
+
+
 # ── OpenAI path ──────────────────────────────────────────────────────────
 def _openai_optimize(sku, current_title, brand, category, ranking_kws,
                      comp_titles, missing_kws) -> dict:

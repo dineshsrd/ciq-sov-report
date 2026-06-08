@@ -430,6 +430,103 @@ def get_sku_detail(client_id: int, search_term: str) -> pd.DataFrame:
     return out.reset_index(drop=True)
 
 
+def _parse_kw_ranked(val) -> list[dict]:
+    """Parse Databricks ARRAY<STRUCT<r,t>> into [{'term','rank'}, ...].
+    Robust to list-of-dict, numpy array, Row-like, or JSON-string forms."""
+    out: list[dict] = []
+    if val is None:
+        return out
+    items = val
+    if isinstance(items, str):
+        try:
+            items = _json.loads(items)
+        except Exception:
+            return out
+    try:
+        for it in items:
+            term = rank = None
+            if isinstance(it, dict):
+                term, rank = it.get("t"), it.get("r")
+            else:  # Row-like / namedtuple
+                try:
+                    term, rank = it["t"], it["r"]
+                except Exception:
+                    try:
+                        rank, term = it[0], it[1]
+                    except Exception:
+                        continue
+            if term is not None:
+                out.append({"term": str(term),
+                            "rank": float(rank) if rank is not None else 0.0})
+    except TypeError:
+        pass
+    return out
+
+
+def get_optimizable_skus(client_id: int, level: str | None,
+                         category_value: str | None,
+                         focus_brand: str) -> pd.DataFrame:
+    """Focus-brand SKUs with the most ranking upside (appear but rank low).
+    Adds a 'kw_ranked' column: [{'term','rank'}] sorted best-rank-first."""
+    if SETTINGS.is_live:
+        from . import queries
+        params = {"cid": int(client_id), "fbrand": focus_brand}
+        lvl = level if (level and category_value is not None) else None
+        if lvl:
+            params["catval"] = category_value
+        df = _run(queries.optimizable_skus_query(lvl), params)
+        if df.empty:
+            return df
+        for c in ("keywords", "best_rank", "page1_kws"):
+            if c in df.columns:
+                df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0).astype(int)
+        if "avg_rank" in df.columns:
+            df["avg_rank"] = pd.to_numeric(df["avg_rank"], errors="coerce").fillna(0.0)
+        df["kw_ranked"] = df["kw_ranked"].map(_parse_kw_ranked) \
+            if "kw_ranked" in df.columns else [[] for _ in range(len(df))]
+        return df.reset_index(drop=True)
+    return _sample_optimizable_skus(client_id, level, category_value, focus_brand)
+
+
+def _sample_optimizable_skus(client_id, level, category_value,
+                             focus_brand) -> pd.DataFrame:
+    """Sample-mode equivalent: per-SKU best rank per keyword, keep the laggards."""
+    sku = sample_data.sku()
+    sub = sku[(sku["client_id"] == client_id) & (sku["brand"] == focus_brand)]
+    if category_value is not None and level is not None:
+        meta = sample_data.metadata()
+        kws = set(meta[meta[level].astype(str) == str(category_value)]["search_term"])
+        sub = sub[sub["search_term"].isin(kws)]
+    if sub.empty:
+        return pd.DataFrame(columns=["sku", "title", "image_url",
+                                     "product_page_url", "keywords", "avg_rank",
+                                     "best_rank", "page1_kws", "kw_ranked"])
+    rows = []
+    for skuid, g in sub.groupby("sku"):
+        kw = g.groupby("search_term").agg(
+            best_rank=("overall_listing_rank", "min"),
+            on_p1=("listing_page", lambda s: int((s == 1).any())))
+        if len(kw) < 1 or kw["best_rank"].mean() <= 3:
+            continue
+        kw_ranked = [{"term": t, "rank": float(r)} for t, r in
+                     kw["best_rank"].sort_values().head(10).items()]
+        rows.append({
+            "sku": skuid, "title": str(g["title"].iloc[0]),
+            "image_url": str(g["image_url"].iloc[0]),
+            "product_page_url": str(g["product_page_url"].iloc[0]),
+            "keywords": int(len(kw)), "avg_rank": round(float(kw["best_rank"].mean()), 1),
+            "best_rank": int(kw["best_rank"].min()),
+            "page1_kws": int(kw["on_p1"].sum()), "kw_ranked": kw_ranked})
+    if not rows:
+        return pd.DataFrame(columns=["sku", "title", "image_url",
+                                     "product_page_url", "keywords", "avg_rank",
+                                     "best_rank", "page1_kws", "kw_ranked"])
+    df = pd.DataFrame(rows)
+    df["_opp"] = df["keywords"] * df["avg_rank"]
+    return (df.sort_values("_opp", ascending=False).drop(columns="_opp")
+            .head(6).reset_index(drop=True))
+
+
 def get_sku_keywords(client_id: int, sku: str) -> pd.DataFrame:
     """Keywords where this ASIN ranks on page 1 — for listing optimization."""
     if SETTINGS.is_live:

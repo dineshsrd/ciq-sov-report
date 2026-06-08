@@ -86,11 +86,6 @@ def _relset(cid, level, catval, start, end, mtype, cutoff, fbrand):
                                              mtype, cutoff, fbrand)
 
 
-@st.cache_data(show_spinner="Finding your products…")
-def _asins(cid, level, catval, fbrand):
-    return data.get_winning_asins(cid, level, catval, fbrand)
-
-
 @st.cache_data(show_spinner="Pulling ad incrementality & efficiency…")
 def _incr(cid, level, catval, start, end):
     return data.get_incrementality(cid, level, catval, start, end)
@@ -105,16 +100,6 @@ def _trend(cid, level, catval, start, end, mtype, cutoff, brands):
 @st.cache_data(show_spinner="Computing category landscape…")
 def _overview(cid, level, start, end, mtype, cutoff, fbrand):
     return data.get_overview(cid, level, start, end, mtype, cutoff, fbrand)
-
-
-@st.cache_data(show_spinner="Fetching keyword rankings for ASIN…")
-def _sku_kws(cid, sku):
-    return data.get_sku_keywords(cid, sku)
-
-
-@st.cache_data(show_spinner="Fetching competitor titles…")
-def _comp_titles(cid, sku):
-    return data.get_competitor_titles(cid, sku)
 
 
 def _num(df: pd.DataFrame) -> pd.DataFrame:
@@ -404,6 +389,58 @@ def _build_overview(start, end):
             "tables": tables, "narrative": narr, "source": src, "html": html}
 
 
+@st.cache_data(show_spinner="Finding SKUs to optimize…")
+def _opt_skus(cid, level, catval, fbrand):
+    return data.get_optimizable_skus(cid, level, catval, fbrand)
+
+
+def _build_sku_opt(cid, level, category_value, focus_brand, kb):
+    """Find the focus brand's underperforming SKUs and generate, for each, an
+    optimized title targeting the category's highest-demand keywords.
+    Returns a block for the report, or None if there's nothing to optimize."""
+    try:
+        opt_df = _opt_skus(cid, level, category_value, focus_brand)
+    except Exception:
+        return None
+    if opt_df is None or opt_df.empty:
+        return None
+
+    # Highest-demand (trending) keywords in this category, by crawl volume.
+    trending: list[str] = []
+    if kb is not None and not kb.empty and "no_of_crawls" in kb.columns:
+        tv = (kb.groupby("search_term")["no_of_crawls"].max()
+              .sort_values(ascending=False).head(15))
+        trending = [str(k) for k in tv.index]
+
+    sku_list = []
+    for _, r in opt_df.head(6).iterrows():
+        sku_list.append({
+            "sku": str(r["sku"]),
+            "title": str(r.get("title", "") or ""),
+            "image_url": str(r.get("image_url", "") or ""),
+            "product_page_url": str(r.get("product_page_url", "") or ""),
+            "avg_rank": float(r.get("avg_rank", 0) or 0),
+            "best_rank": int(r.get("best_rank", 0) or 0),
+            "keywords": int(r.get("keywords", 0) or 0),
+            "page1_kws": int(r.get("page1_kws", 0) or 0),
+            "current_keywords": r.get("kw_ranked", []) or [],
+        })
+
+    with st.spinner("Generating SKU optimization recommendations with AI…"):
+        items, _src = sku_optimizer.optimize_skus_for_report(
+            sku_list, trending, focus_brand, category_value)
+    if not items:
+        return None
+
+    return {
+        "intro": (f"These {len(items)} {focus_brand} products already appear for "
+                  f"high-demand {category_value} keywords but rank below the top "
+                  f"positions — the biggest available ranking upside. Each "
+                  f"optimized title below is built to win the target keywords shown."),
+        "items": items,
+    }
+
+
 def _build_deepdive(start, end):
     brandagg = _brand_agg(cid, level, category_value, start, end)
     if brandagg.empty:
@@ -438,6 +475,10 @@ def _build_deepdive(start, end):
 
     # Ad incrementality only for a brand that is an actual client with ad data
     incr = _incr(cid, level, category_value, start, end) if focus_is_client else None
+
+    # SKU optimization — the brand's underperforming SKUs (appear but rank low)
+    # and how to lift them toward the category's highest-demand keywords.
+    sku_opt_block = _build_sku_opt(cid, level, category_value, focus_brand, kb)
 
     context = {
         "scope": {"brand_label": focus_brand, "category_value": category_value,
@@ -489,6 +530,8 @@ def _build_deepdive(start, end):
         "whitespace": [{"kw": r["search_term"], "your_sov": float(r["client_sov"]),
                         "crawls": float(r["crawls"])} for _, r in ws.head(10).iterrows()],
     }
+    if sku_opt_block:
+        themed["sku_opt"] = sku_opt_block
     if incr:
         s = incr["summary"]
         themed["incr"] = {
@@ -652,203 +695,6 @@ if rep.get("mode") not in ("history", "category") and "kp" in rep:
                         "overall_listing_rank": "Rank", "listing_type": "Type",
                         "brand": "Brand", "title": "Title"})
                     st.dataframe(_num(show), use_container_width=True, hide_index=True)
-
-# ── SKU Optimizer ─────────────────────────────────────────────────────--
-# Shown for any brand deepdive report — client or competitor — whenever a
-# focus brand is set.  focus_is_client gate intentionally removed.
-if rep.get("mode") == "deepdive" and focus_brand:
-    st.divider()
-    with st.expander("🛍️ SKU Optimizer — Rufus-style listing recommendations",
-                     expanded=False):
-        st.caption(
-            f"Pick an ASIN from **{focus_brand}**'s tracked products. "
-            "The optimizer analyses the current title against page-1 keyword "
-            "rankings and competitor listings, then generates an optimized title, "
-            "5 benefit bullets, backend keywords, and Rufus Q&A prep — "
-            "ready to share with the brand's content team.")
-
-        asins_df = _asins(cid, level, category_value, focus_brand)
-
-        if asins_df.empty:
-            st.info("No tracked ASINs found for this brand in this category. "
-                    "Try expanding the date range or switching to 'All categories'.")
-        else:
-            sku_opts = asins_df["sku"].tolist()
-            # Build a per-SKU info dict for the product card
-            sku_info = {
-                r["sku"]: {
-                    "title": str(r.get("title", "") or ""),
-                    "image_url": str(r.get("image_url", "") or ""),
-                    "product_page_url": str(r.get("product_page_url", "") or ""),
-                    "keywords": int(r.get("keywords", 0) or 0),
-                    "best_rank": int(r.get("best_rank", 0) or 0),
-                    "page1_hits": int(r.get("page1_hits", 0) or 0),
-                }
-                for _, r in asins_df.iterrows()
-            }
-
-            sel_sku = st.selectbox(
-                "Choose an ASIN to optimize", sku_opts,
-                format_func=lambda s: (
-                    f"{s}  —  {sku_info.get(s, {}).get('title', '')[:60]}"),
-                key="opt_sku_sel")
-
-            # ── Product card ────────────────────────────────────────────
-            info = sku_info.get(sel_sku, {})
-            c_img, c_text = st.columns([1, 4])
-            with c_img:
-                img = info.get("image_url", "")
-                if img:
-                    st.image(img, width=130)
-                else:
-                    st.markdown(
-                        "<div style='width:130px;height:130px;background:#ece4f5;"
-                        "border-radius:8px;display:flex;align-items:center;"
-                        "justify-content:center;font-size:2.5rem;'>📦</div>",
-                        unsafe_allow_html=True)
-            with c_text:
-                product_title = info.get("title", sel_sku)
-                url = info.get("product_page_url", "")
-                link = (f' <a href="{url}" target="_blank" '
-                        f'style="color:#5AAFFE;font-size:.82em">↗ View on Amazon</a>'
-                        if url else "")
-                st.markdown(
-                    f"<p style='font-weight:600;margin:0 0 6px'>"
-                    f"{product_title[:160]}</p>{link}",
-                    unsafe_allow_html=True)
-                st.caption(
-                    f"ASIN: `{sel_sku}` &nbsp;·&nbsp; "
-                    f"Keywords tracked: **{info.get('keywords', 0)}** &nbsp;·&nbsp; "
-                    f"Best rank: **#{info.get('best_rank', '—')}** &nbsp;·&nbsp; "
-                    f"Page-1 appearances: **{info.get('page1_hits', 0)}**")
-            st.markdown("")
-
-            if st.button("✨ Optimize listing title & content", key="sku_opt_btn",
-                         type="primary", use_container_width=False):
-                with st.spinner("Pulling keyword data and generating recommendations…"):
-                    current_title = info.get("title", "")
-
-                    # Page-1 keywords for this ASIN
-                    kw_df = _sku_kws(cid, sel_sku)
-                    ranking_kws = kw_df.to_dict("records") if not kw_df.empty else []
-
-                    # Competitor titles (top ASINs on the same keywords)
-                    comp_df = _comp_titles(cid, sel_sku)
-                    comp_title_list = [
-                        str(r["title"]) for _, r in comp_df.iterrows()
-                        if r.get("title") and str(r["title"]).strip()
-                    ]
-
-                    # Missing = high-vol category keywords where this ASIN doesn't rank
-                    ranked_set = set(
-                        str(r.get("search_term", "")).lower()
-                        for r in ranking_kws
-                    )
-                    kp = rep.get("kp")
-                    if kp is not None and not kp.empty and "search_term" in kp.columns:
-                        sort_col = ("crawls" if "crawls" in kp.columns else
-                                    kp.columns[1])
-                        missing_kws = [
-                            str(r["search_term"])
-                            for _, r in kp.sort_values(sort_col, ascending=False).iterrows()
-                            if str(r["search_term"]).lower() not in ranked_set
-                        ][:15]
-                    else:
-                        missing_kws = []
-
-                    result, src = sku_optimizer.optimize_sku(
-                        sku=sel_sku,
-                        current_title=current_title,
-                        brand=focus_brand,
-                        category=category_value,
-                        ranking_keywords=ranking_kws,
-                        competitor_titles=comp_title_list,
-                        missing_keywords=missing_kws,
-                    )
-                    st.session_state["sku_opt"] = {
-                        "sku": sel_sku,
-                        "current_title": current_title,
-                        "result": result,
-                        "source": src,
-                    }
-
-            # ── Display results ──────────────────────────────────────────
-            opt = st.session_state.get("sku_opt")
-            if opt and opt.get("sku") == sel_sku:
-                r = opt["result"]
-                src_badge = ("🤖 AI-optimized · GPT" if opt["source"] == "openai"
-                             else "📋 Rule-based · OpenAI not configured")
-                st.caption(src_badge)
-
-                # Title comparison
-                tc1, tc2 = st.columns(2)
-                with tc1:
-                    st.markdown("**Current title**")
-                    st.code(opt["current_title"] or "(no title on record)",
-                            language=None)
-                with tc2:
-                    opt_t = r.get("optimized_title", "")
-                    char_color = "green" if len(opt_t) <= 200 else "red"
-                    st.markdown(
-                        f"**Optimized title ✨** "
-                        f"<span style='color:{char_color};font-size:.82em'>"
-                        f"({len(opt_t)}/200 chars)</span>",
-                        unsafe_allow_html=True)
-                    st.code(opt_t, language=None)
-
-                if r.get("analysis"):
-                    st.info(f"📊 **Why this matters:** {r['analysis']}")
-
-                # Bullet points
-                bullets = r.get("bullets", [])
-                if bullets:
-                    st.markdown("**Recommended bullet points**")
-                    for i, b in enumerate(bullets, 1):
-                        st.markdown(f"{i}. {b}")
-
-                # Backend keywords + byte counter
-                bk = r.get("backend_keywords", "")
-                if bk:
-                    bk_bytes = len(bk.encode())
-                    bc1, bc2 = st.columns([3, 1])
-                    with bc1:
-                        st.markdown("**Backend search terms**")
-                        st.text_area(
-                            "Paste into Seller Central → Keywords → Search Terms",
-                            bk, height=90, key="bk_field")
-                    with bc2:
-                        bk_color = "normal" if bk_bytes <= 249 else "inverse"
-                        st.metric("Bytes used", f"{bk_bytes} / 249",
-                                  delta=f"{249 - bk_bytes} remaining",
-                                  delta_color=bk_color)
-
-                # Rufus Q&A
-                qa_list = r.get("rufus_qa", [])
-                if qa_list:
-                    st.markdown("**Rufus Q&A — prepare your listing for these questions**")
-                    st.caption("These are questions Amazon Rufus shoppers commonly ask. "
-                               "Work these answers into your listing copy.")
-                    for qa in qa_list:
-                        with st.expander(f"❓ {qa.get('q', '')}"):
-                            st.write(qa.get("a", ""))
-
-                # Download brief
-                brief = sku_optimizer.build_brief_html(
-                    sku=sel_sku,
-                    current_title=opt["current_title"],
-                    brand=focus_brand,
-                    category=category_value,
-                    result=r,
-                )
-                st.download_button(
-                    "⬇️ Download optimization brief (HTML)",
-                    brief,
-                    file_name=f"sku_optimization_{sel_sku}.html",
-                    mime="text/html",
-                    use_container_width=True,
-                    key="sku_opt_dl",
-                )
-
 
 # ── Downloads ──────────────────────────────────────────────────────────--
 st.markdown("### 📤 Download & share")
