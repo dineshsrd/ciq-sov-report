@@ -15,7 +15,7 @@ import streamlit.components.v1 as components
 
 from config import SETTINGS
 from sov import branding as B
-from sov import data, history, narrative, report, transforms
+from sov import data, history, narrative, report, sku_optimizer, transforms
 from sov.metrics import CATEGORY_LABELS, CUTOFFS
 
 st.set_page_config(page_title="Category & Keyword Positioning",
@@ -105,6 +105,16 @@ def _trend(cid, level, catval, start, end, mtype, cutoff, brands):
 @st.cache_data(show_spinner="Computing category landscape…")
 def _overview(cid, level, start, end, mtype, cutoff, fbrand):
     return data.get_overview(cid, level, start, end, mtype, cutoff, fbrand)
+
+
+@st.cache_data(show_spinner="Fetching keyword rankings for ASIN…")
+def _sku_kws(cid, sku):
+    return data.get_sku_keywords(cid, sku)
+
+
+@st.cache_data(show_spinner="Fetching competitor titles…")
+def _comp_titles(cid, sku):
+    return data.get_competitor_titles(cid, sku)
 
 
 def _num(df: pd.DataFrame) -> pd.DataFrame:
@@ -642,6 +652,162 @@ if rep.get("mode") not in ("history", "category") and "kp" in rep:
                         "overall_listing_rank": "Rank", "listing_type": "Type",
                         "brand": "Brand", "title": "Title"})
                     st.dataframe(_num(show), use_container_width=True, hide_index=True)
+
+# ── SKU Optimizer ─────────────────────────────────────────────────────--
+# Only shown for brand-mode reports of actual CIQ clients (they can act on it).
+if rep.get("mode") not in ("history", "category") and focus_is_client:
+    st.divider()
+    with st.expander("🛍️ SKU Optimizer — Rufus-style listing recommendations",
+                     expanded=False):
+        st.caption(
+            "Pick one of your tracked ASINs. The optimizer analyses your current "
+            "title against page-1 keyword rankings and competitor listings, then "
+            "generates an optimized title, 5 benefit bullets, backend keywords, "
+            "and Rufus Q&A — ready to paste into Seller Central.")
+
+        asins_df = _asins(cid, level, category_value, focus_brand)
+
+        if asins_df.empty:
+            st.info("No tracked ASINs found for this brand in this category. "
+                    "Try expanding the date range or switching to 'All categories'.")
+        else:
+            sku_opts = asins_df["sku"].tolist()
+            sku_titles = {
+                r["sku"]: f"{r['sku']}  —  {str(r.get('title', ''))[:55]}"
+                for _, r in asins_df.iterrows()
+            }
+            sel_sku = st.selectbox(
+                "Choose an ASIN to optimize", sku_opts,
+                format_func=lambda s: sku_titles.get(s, s),
+                key="opt_sku_sel")
+
+            if st.button("✨ Optimize this listing", key="sku_opt_btn",
+                         type="primary", use_container_width=False):
+                with st.spinner("Pulling keyword data and generating recommendations…"):
+                    sel_row = asins_df[asins_df["sku"] == sel_sku].iloc[0]
+                    current_title = str(sel_row.get("title", "") or "")
+
+                    # Page-1 keywords for this ASIN
+                    kw_df = _sku_kws(cid, sel_sku)
+                    ranking_kws = kw_df.to_dict("records") if not kw_df.empty else []
+
+                    # Competitor titles (top ASINs on the same keywords)
+                    comp_df = _comp_titles(cid, sel_sku)
+                    comp_title_list = [
+                        str(r["title"]) for _, r in comp_df.iterrows()
+                        if r.get("title") and str(r["title"]).strip()
+                    ]
+
+                    # Missing = high-vol category keywords where this ASIN doesn't rank
+                    ranked_set = set(
+                        str(r.get("search_term", "")).lower()
+                        for r in ranking_kws
+                    )
+                    kp = rep.get("kp")
+                    if kp is not None and not kp.empty and "search_term" in kp.columns:
+                        sort_col = ("crawls" if "crawls" in kp.columns else
+                                    kp.columns[1])
+                        missing_kws = [
+                            str(r["search_term"])
+                            for _, r in kp.sort_values(sort_col, ascending=False).iterrows()
+                            if str(r["search_term"]).lower() not in ranked_set
+                        ][:15]
+                    else:
+                        missing_kws = []
+
+                    result, src = sku_optimizer.optimize_sku(
+                        sku=sel_sku,
+                        current_title=current_title,
+                        brand=focus_brand,
+                        category=category_value,
+                        ranking_keywords=ranking_kws,
+                        competitor_titles=comp_title_list,
+                        missing_keywords=missing_kws,
+                    )
+                    st.session_state["sku_opt"] = {
+                        "sku": sel_sku,
+                        "current_title": current_title,
+                        "result": result,
+                        "source": src,
+                    }
+
+            # ── Display results ──────────────────────────────────────────
+            opt = st.session_state.get("sku_opt")
+            if opt and opt.get("sku") == sel_sku:
+                r = opt["result"]
+                src_badge = ("🤖 AI-optimized · GPT" if opt["source"] == "openai"
+                             else "📋 Rule-based · OpenAI not configured")
+                st.caption(src_badge)
+
+                # Title comparison
+                tc1, tc2 = st.columns(2)
+                with tc1:
+                    st.markdown("**Current title**")
+                    st.code(opt["current_title"] or "(no title on record)",
+                            language=None)
+                with tc2:
+                    opt_t = r.get("optimized_title", "")
+                    char_color = "green" if len(opt_t) <= 200 else "red"
+                    st.markdown(
+                        f"**Optimized title ✨** "
+                        f"<span style='color:{char_color};font-size:.82em'>"
+                        f"({len(opt_t)}/200 chars)</span>",
+                        unsafe_allow_html=True)
+                    st.code(opt_t, language=None)
+
+                if r.get("analysis"):
+                    st.info(f"📊 **Why this matters:** {r['analysis']}")
+
+                # Bullet points
+                bullets = r.get("bullets", [])
+                if bullets:
+                    st.markdown("**Recommended bullet points**")
+                    for i, b in enumerate(bullets, 1):
+                        st.markdown(f"{i}. {b}")
+
+                # Backend keywords + byte counter
+                bk = r.get("backend_keywords", "")
+                if bk:
+                    bk_bytes = len(bk.encode())
+                    bc1, bc2 = st.columns([3, 1])
+                    with bc1:
+                        st.markdown("**Backend search terms**")
+                        st.text_area(
+                            "Paste into Seller Central → Keywords → Search Terms",
+                            bk, height=90, key="bk_field")
+                    with bc2:
+                        bk_color = "normal" if bk_bytes <= 249 else "inverse"
+                        st.metric("Bytes used", f"{bk_bytes} / 249",
+                                  delta=f"{249 - bk_bytes} remaining",
+                                  delta_color=bk_color)
+
+                # Rufus Q&A
+                qa_list = r.get("rufus_qa", [])
+                if qa_list:
+                    st.markdown("**Rufus Q&A — prepare your listing for these questions**")
+                    st.caption("These are questions Amazon Rufus shoppers commonly ask. "
+                               "Work these answers into your listing copy.")
+                    for qa in qa_list:
+                        with st.expander(f"❓ {qa.get('q', '')}"):
+                            st.write(qa.get("a", ""))
+
+                # Download brief
+                brief = sku_optimizer.build_brief_html(
+                    sku=sel_sku,
+                    current_title=opt["current_title"],
+                    brand=focus_brand,
+                    category=category_value,
+                    result=r,
+                )
+                st.download_button(
+                    "⬇️ Download optimization brief (HTML)",
+                    brief,
+                    file_name=f"sku_optimization_{sel_sku}.html",
+                    mime="text/html",
+                    use_container_width=True,
+                    key="sku_opt_dl",
+                )
+
 
 # ── Downloads ──────────────────────────────────────────────────────────--
 st.markdown("### 📤 Download & share")

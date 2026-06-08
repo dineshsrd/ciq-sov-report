@@ -462,6 +462,50 @@ LIMIT 300
 """.strip()
 
 
+# ── SKU optimizer queries ─────────────────────────────────────────────────
+def sku_keywords_query() -> str:
+    """Keywords where a specific ASIN ranks on page 1 — used for listing opt."""
+    return f"""
+SELECT search_term,
+       MIN(overall_listing_rank) AS best_rank,
+       SUM(CASE WHEN listing_page = 1 THEN 1 ELSE 0 END) AS page1_hits,
+       COUNT(DISTINCT feed_date) AS days_tracked
+FROM {_S()}
+WHERE client_id = :cid AND sku = :sku
+  AND feed_date >= date_sub(current_date(), 14)
+GROUP BY search_term
+ORDER BY page1_hits DESC, best_rank ASC
+LIMIT 30
+""".strip()
+
+
+def competitor_titles_query() -> str:
+    """Top competitor ASIN titles on the same keywords the focus SKU ranks on."""
+    return f"""
+WITH focus_kws AS (
+  SELECT DISTINCT search_term FROM {_S()}
+  WHERE client_id = :cid AND sku = :sku
+    AND listing_page = 1
+    AND feed_date >= date_sub(current_date(), 14)
+  LIMIT 15
+)
+SELECT s.sku, MAX(s.title) AS title, MAX(s.brand) AS brand,
+       COUNT(DISTINCT s.search_term) AS kw_count,
+       AVG(s.overall_listing_rank) AS avg_rank
+FROM {_S()} s
+JOIN focus_kws k ON s.search_term = k.search_term
+WHERE s.client_id = :cid
+  AND s.sku != :sku
+  AND s.listing_page = 1
+  AND s.overall_listing_rank <= 5
+  AND s.feed_date >= date_sub(current_date(), 14)
+  AND s.title IS NOT NULL
+GROUP BY s.sku
+ORDER BY kw_count DESC, avg_rank ASC
+LIMIT 5
+""".strip()
+
+
 def region_share_query(level: str | None) -> str:
     return f"""
 WITH s AS (

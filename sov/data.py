@@ -427,6 +427,32 @@ def get_sku_detail(client_id: int, search_term: str) -> pd.DataFrame:
     return out.reset_index(drop=True)
 
 
+def get_sku_keywords(client_id: int, sku: str) -> pd.DataFrame:
+    """Keywords where this ASIN ranks on page 1 — for listing optimization."""
+    if SETTINGS.is_live:
+        from . import queries
+        df = _run(queries.sku_keywords_query(),
+                  {"cid": int(client_id), "sku": sku})
+        for c in ("best_rank", "page1_hits", "days_tracked"):
+            if c in df.columns:
+                df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0)
+        return df.sort_values("page1_hits", ascending=False).reset_index(drop=True)
+    return pd.DataFrame(columns=["search_term", "best_rank", "page1_hits", "days_tracked"])
+
+
+def get_competitor_titles(client_id: int, sku: str) -> pd.DataFrame:
+    """Top competitor ASIN titles on the same keywords as the focus SKU."""
+    if SETTINGS.is_live:
+        from . import queries
+        df = _run(queries.competitor_titles_query(),
+                  {"cid": int(client_id), "sku": sku})
+        for c in ("kw_count", "avg_rank"):
+            if c in df.columns:
+                df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0)
+        return df
+    return pd.DataFrame(columns=["sku", "title", "brand", "kw_count", "avg_rank"])
+
+
 def get_region_share(client_id: int, level: str | None,
                      category_value: str | None,
                      focus_brand: str) -> pd.DataFrame:
