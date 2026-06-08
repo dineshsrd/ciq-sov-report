@@ -118,6 +118,15 @@ LIMIT 8000
 """.strip()
 
 
+def best_client_for_category_query(level: str) -> str:
+    """The client_id with the most keyword coverage in the chosen L1/L2 —
+    used as the data source for category-mode reports (no focus brand)."""
+    lvl = _check_level(level)
+    return (f"SELECT client_id, COUNT(DISTINCT search_term) AS kws "
+            f"FROM {_M()} WHERE {lvl} = :value "
+            f"GROUP BY client_id ORDER BY kws DESC LIMIT 1")
+
+
 def date_bounds_query() -> str:
     return (f"SELECT MIN(feed_date) AS min_d, MAX(feed_date) AS max_d "
             f"FROM {_P()} WHERE client_id = :cid")

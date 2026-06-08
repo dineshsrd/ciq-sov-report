@@ -65,6 +65,11 @@ def _brands_in_cat(level, value):
     return data.get_brands_in_category(level, value)
 
 
+@st.cache_data(show_spinner=False)
+def _best_cid_for_cat(level, value):
+    return data.get_best_client_for_category(level, value)
+
+
 @st.cache_data(show_spinner="Building category leaderboard…")
 def _brand_agg(cid, level, catval, start, end):
     return data.get_brand_agg(cid, level, catval, start, end)
@@ -129,8 +134,21 @@ if SETTINGS.is_live and not SETTINGS.databricks_ready:
     st.stop()
 
 
-# ── Sidebar (category-first) ─────────────────────────────────────────────
+# ── Sidebar ───────────────────────────────────────────────────────────────
 with st.sidebar:
+    # ── Mode selector ────────────────────────────────────────────────────
+    report_mode = st.radio(
+        "Report type",
+        ["🔍 Brand Report", "📊 Category Report"],
+        horizontal=True,
+        help="**Brand Report** — pick one brand and see how it ranks vs competitors.\n\n"
+             "**Category Report** — see the full category landscape with no focus brand; "
+             "great for prospect outreach.")
+    is_category_mode = report_mode == "📊 Category Report"
+
+    st.divider()
+
+    # ── 1 · Category pickers (shared by both modes) ──────────────────────
     st.header("1 · Choose a category")
     l1_pairs = _l1_values()
     if not l1_pairs:
@@ -153,35 +171,54 @@ with st.sidebar:
         l2v, l2k = l2_lookup[l2_choice]
         level, category_value, selected_kw = "digital_shelf_l2", l2v, l2k
 
-    st.header("2 · Pick a brand to analyze")
-    cat_brands = _brands_in_cat(level, category_value)
-    if not cat_brands:
-        st.warning("No brands found competing in this category. Try another.")
-        st.stop()
-    names = [b["brand"] for b in cat_brands]
-    brand_name = st.selectbox(f"Brands in {category_value}", names,
-                              help="Brands tracked in this category. "
-                                   "The report highlights the one you pick.")
-    focus = cat_brands[names.index(brand_name)]
-    cid, focus_brand = focus["client_id"], focus["brand"]
-    focus_is_client = bool(focus.get("is_client", True))
+    # ── 2 · Brand picker (brand mode only) ───────────────────────────────
+    if not is_category_mode:
+        st.header("2 · Pick a brand to analyze")
+        cat_brands = _brands_in_cat(level, category_value)
+        if not cat_brands:
+            st.warning("No brands found competing in this category. Try another.")
+            st.stop()
+        names = [b["brand"] for b in cat_brands]
+        brand_name = st.selectbox(
+            f"Brands in {category_value}", names,
+            help="Brands tracked in this category. The report highlights the one you pick.")
+        focus = cat_brands[names.index(brand_name)]
+        cid, focus_brand = focus["client_id"], focus["brand"]
+        focus_is_client = bool(focus.get("is_client", True))
+    else:
+        # Category mode: resolve best client_id for date-range bounds
+        focus_brand = None
+        focus_is_client = False
+        cid_for_bounds = _best_cid_for_cat(level, category_value)
+        if not cid_for_bounds:
+            st.warning("No data found for this category. Try a different one.")
+            st.stop()
+        cid = cid_for_bounds
 
-    st.header("3 · How to measure")
+    # ── 3 · Measure settings ─────────────────────────────────────────────
+    step_label = "3 · How to measure" if not is_category_mode else "2 · Date range"
+    st.header(step_label)
     lo, hi = _bounds(cid)
     earliest = max(lo, hi - dt.timedelta(days=MAX_DAYS))
     date_range = st.date_input(f"Date range (last {MAX_DAYS} days max)",
                                value=(earliest, hi),
                                min_value=earliest, max_value=hi)
-    lens_label = st.radio("Ad type", list(LENS.keys()), index=0)
-    mtype = LENS[lens_label]
-    cutoff = st.selectbox("Position", list(CUTOFFS.keys()), index=0,
-                          format_func=lambda x: CUTOFFS[x])
-    top_n = st.slider("Keywords to show", 5, 30, 15)
 
-    _default_name = f"{focus_brand} — {category_value}"
-    report_name = st.text_input("Report name", value="", placeholder=_default_name,
-                                help="Used for the saved history entry and the "
-                                     "download filename. Leave blank to auto-name.")
+    if not is_category_mode:
+        lens_label = st.radio("Ad type", list(LENS.keys()), index=0)
+        mtype = LENS[lens_label]
+        cutoff = st.selectbox("Position", list(CUTOFFS.keys()), index=0,
+                              format_func=lambda x: CUTOFFS[x])
+        top_n = st.slider("Keywords to show", 5, 30, 15)
+        _default_name = f"{focus_brand} — {category_value}"
+    else:
+        mtype, cutoff, top_n = "all", "page_1", 15
+        _default_name = f"Category: {category_value}"
+
+    report_name = st.text_input(
+        "Report name", value="", placeholder=_default_name,
+        help="Used for the saved history entry and the download filename. "
+             "Leave blank to auto-name.")
 
     generate = st.button("🚀 Generate report", type="primary",
                          use_container_width=True)
@@ -461,17 +498,112 @@ def _build_deepdive(start, end):
     return {"mode": "deepdive", "scope": scope, "html": html, "kp": kp, "source": src}
 
 
+def _build_category_report(start, end):
+    """Category-landscape report — no focus brand."""
+    best_cid = _best_cid_for_cat(level, category_value)
+    if best_cid is None:
+        st.warning("No data found for this category/date range.")
+        return None
+
+    brandagg = _brand_agg(best_cid, level, category_value, start, end)
+    if brandagg.empty:
+        st.warning("No data for this category/date range.")
+        return None
+
+    scope = {
+        "level": level,
+        "level_label": CATEGORY_LABELS[level],
+        "category_value": category_value,
+        "metric_label": "Combined SOV",
+        "date_min": str(start),
+        "date_max": str(end),
+        "name": (report_name.strip() or f"Category: {category_value}"),
+    }
+
+    # Full leaderboard — no focus brand; clear is_client so no "YOU" tag
+    cl = transforms.combined_leaderboard(brandagg, "page_1", focus_brand=None, top=15)
+    cl = cl.copy()
+    cl["is_client"] = False  # no "YOU" in category mode
+
+    nbrands = int(brandagg["brand"].nunique())
+    top1 = cl.iloc[0] if not cl.empty else None
+
+    # Sub-category leaders (child level)
+    lvl_n = int(level.rsplit("l", 1)[-1])
+    child_level = f"digital_shelf_l{lvl_n + 1}" if lvl_n < 10 else None
+    leaders = (data.get_category_leaders(best_cid, child_level, level,
+                                         category_value, start, end,
+                                         "all", "page_1", "")
+               if child_level else None)
+    if leaders is not None and leaders.empty:
+        leaders = None
+
+    # Top keywords by demand volume
+    kb = _kb(best_cid, level, category_value, start, end)
+    kp_rows: list[dict] = []
+    if not kb.empty and "search_term" in kb.columns and "no_of_crawls" in kb.columns:
+        kw_vol = (kb.groupby("search_term")["no_of_crawls"]
+                  .max().sort_values(ascending=False).head(10))
+        kp_rows = [{"kw": kw, "crawls": float(v)} for kw, v in kw_vol.items()]
+
+    context = {
+        "scope": {"category_value": category_value},
+        "hero": {
+            "top_brand": str(top1["brand"]) if top1 is not None else "—",
+            "top_sov": float(top1["combined_sov"]) if top1 is not None else 0.0,
+            "brands": nbrands,
+            "keywords": selected_kw,
+        },
+        "leaderboard": [{"brand": str(r["brand"]), "sov": float(r["combined_sov"])}
+                        for _, r in cl.iterrows()],
+        "subcategory_leaders": ([{"sub": r["category"], "leader": r["leader"],
+                                   "leader_sov": float(r["leader_sov"])}
+                                  for _, r in leaders.head(8).iterrows()]
+                                 if leaders is not None else []),
+        "top_keywords": kp_rows,
+    }
+
+    with st.spinner("Writing category insights…"):
+        ins, src = narrative.generate_category_insights(context)
+
+    themed = {
+        "hero": context["hero"],
+        "leaderboard": [{"brand": r["brand"],
+                          "combined_sov": float(r["combined_sov"]),
+                          "organic_pts": float(r["organic_pts"]),
+                          "paid_pts": float(r["paid_pts"]),
+                          "is_focus": False}
+                         for _, r in cl.iterrows()],
+        "subcats": ([{"sub": r["category"], "leader": r["leader"],
+                      "leader_sov": float(r["leader_sov"])}
+                     for _, r in leaders.head(6).iterrows()]
+                    if leaders is not None else []),
+        "keywords": kp_rows,
+    }
+
+    html = report.build_category_report(scope, ins, themed, src)
+    return {"mode": "category", "scope": scope, "html": html, "source": src}
+
+
 if generate:
     st.session_state.pop("pdf_bytes", None)
     start, end = _dates()
     if start is None:
         st.warning("Please pick a start and end date.")
     else:
-        rep_ = _build_deepdive(start, end)
+        if is_category_mode:
+            rep_ = _build_category_report(start, end)
+        else:
+            rep_ = _build_deepdive(start, end)
         st.session_state["report"] = rep_
         if rep_:
             try:
-                history.save_report(rep_["scope"], rep_["html"], rep_.get("source", ""))
+                # Normalise scope so history always has brand_label + category
+                _scope_for_hist = dict(rep_["scope"])
+                if "brand_label" not in _scope_for_hist:
+                    _scope_for_hist["brand_label"] = "📊 Category"
+                history.save_report(_scope_for_hist, rep_["html"],
+                                    rep_.get("source", ""))
             except Exception:
                 pass
 
@@ -487,10 +619,13 @@ if not rep:
 if rep.get("mode") == "history":
     st.info(f"📜 Viewing a saved report — **{rep['scope'].get('brand_label','')}** · "
             f"{rep['scope'].get('category_value','')} · generated {rep.get('ts','')}")
+elif rep.get("mode") == "category":
+    st.info(f"📊 **Category Report** — {rep['scope'].get('category_value','')} · "
+            f"{rep['scope'].get('date_min','')} → {rep['scope'].get('date_max','')}")
 
 components.html(rep["html"], height=5200, scrolling=True)
 
-if rep.get("mode") != "history" and "kp" in rep:
+if rep.get("mode") not in ("history", "category") and "kp" in rep:
     with st.expander("🛒 Product shelf — see the products winning a keyword"):
         kws = rep["kp"]["search_term"].tolist()
         if kws:

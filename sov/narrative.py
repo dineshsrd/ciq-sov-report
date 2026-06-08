@@ -118,6 +118,105 @@ def _template_sectioned(ctx: dict) -> dict:
             "readiness": readiness, "how_you_win": how_you_win}
 
 
+CATEGORY_SECTION_KEYS = ["verdict", "leaderboard", "organic_paid",
+                          "subcategories", "keywords", "how_you_win"]
+
+
+def generate_category_insights(context: dict) -> tuple[dict, str]:
+    """Category-mode insights — no focus brand. Returns ({section_key: text}, source)."""
+    if SETTINGS.openai_ready:
+        try:
+            return _openai_category(context), "openai"
+        except Exception:
+            return _template_category(context), "template"
+    return _template_category(context), "template"
+
+
+def _openai_category(context: dict) -> dict:
+    from openai import OpenAI
+
+    client = OpenAI(api_key=SETTINGS.openai_api_key)
+    system = (
+        "You are a senior retail-media analyst at CommerceIQ writing a Category "
+        "Share-of-Search intelligence report. This is a CATEGORY landscape view — "
+        "there is NO single focus brand. Write sharp, executive insights describing "
+        "who owns the category, where share is concentrated vs fragmented, and where "
+        "the opportunity is for any brand competing in this space. "
+        "Use ONLY the numbers in the JSON. Never invent figures or brand names. "
+        "Tone: authoritative, data-led, designed to make a brand want to know "
+        "exactly where they stand. "
+        "Return a JSON object with EXACTLY these string keys: "
+        + ", ".join(CATEGORY_SECTION_KEYS) + ". "
+        "Guidance per key: "
+        "'verdict' = 2-3 sentence headline naming the leader and describing competitive intensity; "
+        "'leaderboard' = what the top brand SOV levels reveal about market concentration; "
+        "'organic_paid' = how organic vs paid share are balanced across the category; "
+        "'subcategories' = which sub-categories are contested vs dominated; "
+        "'keywords' = what the highest-demand terms reveal about shopper intent; "
+        "'how_you_win' = 2-4 sentence playbook for gaining share in this category "
+        "plus a nudge to talk to CommerceIQ (do NOT name specific products). "
+        "Each value 1-3 sentences, under 60 words. Cite only exact numbers from JSON."
+    )
+    resp = client.chat.completions.create(
+        model=SETTINGS.openai_model,
+        messages=[{"role": "system", "content": system},
+                  {"role": "user", "content": json.dumps(context, default=str)}],
+        temperature=0.4, max_tokens=800,
+        response_format={"type": "json_object"},
+    )
+    data = json.loads(resp.choices[0].message.content)
+    return {k: str(data.get(k, "")).strip() for k in CATEGORY_SECTION_KEYS}
+
+
+def _template_category(ctx: dict) -> dict:
+    cat = ctx.get("scope", {}).get("category_value", "this category")
+    lb = ctx.get("leaderboard", [])
+    top = lb[0] if lb else None
+    top2 = lb[1] if len(lb) > 1 else None
+    h = ctx.get("hero", {})
+    nbr = h.get("brands", 0)
+    nkw = h.get("keywords", 0)
+    subs = ctx.get("subcategory_leaders", [])
+    kws = ctx.get("top_keywords", [])
+
+    verdict = (
+        f"{top['brand']} leads {cat} with {top['sov']:.1f}% Combined Share of Voice"
+        + (f", ahead of {top2['brand']} at {top2['sov']:.1f}%." if top2 else ".")
+        + f" {nbr:,} brands compete across {nkw:,} tracked keywords."
+        if top else f"No clear leader has emerged in {cat} — {nbr:,} brands are competing."
+    )
+    leaderboard = (
+        f"The top brand in {cat} holds {top['sov']:.1f}% share — "
+        + (f"a {'concentrated' if top['sov'] > 20 else 'fragmented'} market where "
+           f"the top 3 brands {'dominate' if top['sov'] > 15 else 'share'} the space.")
+        if top else "Share is fragmented across many brands."
+    )
+    organic_paid = (
+        f"The top brands in {cat} win through a mix of organic content coverage "
+        "and paid search placements. Organic share compounds over time; paid share "
+        "is available immediately to any brand investing in the right search terms."
+    )
+    subcategories = (
+        f"No single brand dominates every sub-category in {cat}. "
+        + (f"{subs[0]['leader']} leads {subs[0]['sub']}, but challenger brands "
+           "find their opening in adjacent sub-categories." if subs else
+           "This creates multiple entry points for challenger brands.")
+    )
+    keywords = (
+        "Highest-demand search terms: " + ", ".join(f'"{k["kw"]}"' for k in kws[:3]) + "."
+        if kws else f"High shopper intent across {nkw:,} tracked keywords in {cat}."
+    )
+    how_you_win = (
+        f"To win share in {cat}, rank organically on the highest-traffic terms and "
+        "use sponsored placements to capture searches where organic rank is low. "
+        "CommerceIQ can show exactly where your brand stands today and automate "
+        "the path to more share — across both organic content and paid campaigns."
+    )
+    return {"verdict": verdict, "leaderboard": leaderboard,
+            "organic_paid": organic_paid, "subcategories": subcategories,
+            "keywords": keywords, "how_you_win": how_you_win}
+
+
 def generate_narrative(context: dict) -> tuple[str, str]:
     """Return (narrative_markdown, source) where source is 'openai' or 'template'."""
     if SETTINGS.openai_ready:

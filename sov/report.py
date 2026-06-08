@@ -635,6 +635,155 @@ def build_themed_report(scope: dict, ins: dict, d: dict,
 </body></html>"""
 
 
+def _cat_subcards(cards: list[dict], cat: str) -> str:
+    """Sub-category cards for category report — shows category leader only,
+    no 'YOU' bar (there is no focus brand in category mode)."""
+    if not cards:
+        return ""
+    out = ['<div class="subgrid">']
+    for i, c in enumerate(cards):
+        col = _PAL[i % len(_PAL)]
+        lead_sov = c.get("leader_sov", 0) or 0
+        out.append(
+            f'<div class="subcard"><div class="sc-head" style="--c:{col}">'
+            f'<div class="sc-path">{_html.escape(cat)} <strong>&rarr;</strong> '
+            f'{_html.escape(str(c["sub"]))}</div>'
+            f'<div class="sc-title">{_html.escape(str(c["sub"]))}</div>'
+            f'<div class="sc-leader">{_badge(c["leader"], col)}'
+            f'<div><div class="ld-lab">Category Leader</div>'
+            f'<div class="ld-nm">{_html.escape(str(c["leader"]))}</div></div>'
+            f'<div class="ld-sov"><div class="v">{lead_sov:.1f}%</div>'
+            f'<div style="font-family:var(--mono);font-size:9px;color:var(--muted2)">'
+            f'SOV</div></div></div></div></div>')
+    out.append("</div>")
+    return "".join(out)
+
+
+def _demand_kwlines(kws: list[dict]) -> str:
+    """Keyword rows with a demand (crawl volume) bar — no SOV column
+    since there is no focus brand in category mode."""
+    if not kws:
+        return ""
+    mx = max((k.get("crawls", 0) for k in kws), default=0) or 1.0
+    rows = ['<div class="subcard wide"><div class="sc-body">']
+    for k in kws:
+        w = min(100, k.get("crawls", 0) / mx * 100)
+        rows.append(
+            f'<div class="kwline"><span class="kw">{_html.escape(str(k["kw"]))}</span>'
+            f'<span class="rk"><span class="demand">'
+            f'<i style="width:{w:.0f}%"></i></span>'
+            f'<span class="rnum"><b>{k["crawls"]:,.0f}</b> crawls</span>'
+            f'</span></div>')
+    rows.append("</div></div>")
+    return "".join(rows)
+
+
+def build_category_report(scope: dict, ins: dict, d: dict,
+                           narrative_source: str = "template") -> str:
+    """Category-landscape report — no focus brand.
+    Shows who owns the category, sub-category breakdown, and top keywords.
+    CTA nudges the reader to find out where THEIR brand stands."""
+    cat = str(scope.get("category_value", ""))
+    src = "AI · OpenAI" if narrative_source == "openai" else "rule-based"
+    h = d.get("hero", {})  # {top_brand, top_sov, brands, keywords}
+
+    hero = (
+        f'<header class="hero"><div class="wrap">'
+        f'<div class="eyebrow">Category Share of Search · {_html.escape(cat)} · Amazon</div>'
+        f'<h1>Who Owns <em>{_html.escape(cat)}</em>?</h1>'
+        f'<p class="sub">{_inl(ins.get("verdict", ""))}</p>'
+        f'<div class="heroband">'
+        f'<div class="cell"><div class="k">Category Leader</div>'
+        f'<div class="v accent">{_html.escape(str(h.get("top_brand", "—")))}'
+        f'<span class="u"> · {h.get("top_sov", 0):.1f}% SOV</span></div></div>'
+        f'<div class="cell"><div class="k">Brands Competing</div>'
+        f'<div class="v">{h.get("brands", 0):,}</div></div>'
+        f'<div class="cell"><div class="k">Keywords Tracked</div>'
+        f'<div class="v">{h.get("keywords", 0):,}</div></div>'
+        f'</div></div></header>')
+
+    secs = []
+    n = 1
+    if d.get("leaderboard"):
+        legend = (
+            '<span><i style="background:linear-gradient(90deg,#C231FF,#a01fe0)"></i>Organic</span>'
+            '<span><i style="background:linear-gradient(90deg,#5AAFFE,#1F22B2)"></i>Paid</span>')
+        secs.append(_section(
+            f"{n:02d}", f"Category Leaderboard — {cat}",
+            ins.get("leaderboard", ""), _combined_lb(d["leaderboard"]),
+            note=ins.get("organic_paid", ""), legend=legend))
+        n += 1
+
+    if d.get("subcats"):
+        secs.append(_section(
+            f"{n:02d}", "Sub-Category Breakdown",
+            ins.get("subcategories", ""), _cat_subcards(d["subcats"], cat),
+            note="No single brand dominates every sub-category — "
+                 "this is where challenger brands find their opening."))
+        n += 1
+
+    if d.get("keywords"):
+        secs.append(_section(
+            f"{n:02d}", "Highest-Demand Keywords",
+            ins.get("keywords", ""), _demand_kwlines(d["keywords"])))
+        n += 1
+
+    levers = (
+        '<div class="levers">'
+        '<div class="lever org"><div class="tag">Lever 01 · Organic</div>'
+        '<h3>Content wins share durably</h3>'
+        '<p>The top-ranked brands optimise every listing for the searches shoppers run — '
+        'titles, bullets, A+ content and backend keywords tuned to each target term. '
+        'Organic share compounds: it earns placement without ongoing spend.</p></div>'
+        '<div class="lever paid"><div class="tag">Lever 02 · Paid</div>'
+        '<h3>Ads win share immediately</h3>'
+        '<p>Sponsored placements buy real estate on the highest-intent searches today. '
+        'Find the keywords with low organic coverage and high crawl volume — '
+        'that\'s where incremental paid share is most available and cheapest to capture.</p></div></div>')
+    secs.append(_section(
+        f"{n:02d}", f"How to Win Share in {cat}",
+        ins.get("how_you_win", ""), levers))
+
+    cta = (
+        '<section class="cta"><div class="wrap">'
+        '<div class="eyebrow" style="color:var(--sky)">'
+        'CommerceIQ Share-of-Search Intelligence</div>'
+        f'<h2>Is your brand in the <em>{_html.escape(cat)}</em> race?</h2>'
+        '<p>CommerceIQ maps your organic and paid share on every target term, shows '
+        'exactly who is winning and why, and puts automation to work capturing the '
+        'share that is available.</p>'
+        '<a class="btn" href="https://www.commerceiq.ai/">'
+        'See where you stand &rarr;</a>'
+        '</div></section>')
+
+    footer = (
+        '<footer><div class="wrap">'
+        f'<span>&#169; CommerceIQ &middot; Category Share of Search Report</span>'
+        f'<span>Category: {_html.escape(cat)} &middot; '
+        f'{_html.escape(str(scope.get("date_min", "")))} &rarr; '
+        f'{_html.escape(str(scope.get("date_max", "")))}</span>'
+        f'<span>Insights: {src}</span></div></footer>')
+
+    return (
+        f'<!doctype html><html lang="en"><head><meta charset="utf-8">'
+        f'<meta name="viewport" content="width=device-width, initial-scale=1">'
+        f'<title>{_html.escape(str(scope.get("name") or f"Category SoS — {cat}"))}</title>'
+        f'<link rel="preconnect" href="https://fonts.googleapis.com">'
+        f'<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:'
+        f'wght@400;500;600;700;800;900&family=IBM+Plex+Mono:wght@400;500;600'
+        f'&display=swap" rel="stylesheet">'
+        f'<style>{_THEME_CSS}</style></head><body>'
+        f'<div class="topbar"><div class="wrap">'
+        f'<div class="brandlogo"><span class="dot"></span>CommerceIQ</div>'
+        f'<div class="confid">Category Intelligence Report</div>'
+        f'</div></div>'
+        f'{hero}'
+        f'<main class="wrap">{"".join(secs)}</main>'
+        f'{cta}{footer}'
+        f'</body></html>'
+    )
+
+
 def html_to_pdf(html_str: str, out_path: str | Path) -> Path | None:
     """Render the HTML report to PDF via headless Chromium (Playwright).
 

@@ -103,6 +103,21 @@ def get_l2_values(l1: str) -> list[tuple[str, int]]:
     return [(str(v), int(k)) for v, k in vc.items() if pd.notna(v)]
 
 
+def get_best_client_for_category(level: str, value: str) -> int | None:
+    """Returns the client_id with the most keyword coverage in the given L1/L2.
+    Used as the data source for category-mode reports."""
+    if SETTINGS.is_live:
+        def _p():
+            from . import queries
+            df = _run(queries.best_client_for_category_query(level), {"value": value})
+            if df.empty:
+                return None
+            return int(df.iloc[0]["client_id"])
+        key = f"bestclient_{_hash(level + '|' + value)}"
+        return _disk_cached(key, 6 * 3600, _p)
+    return sample_data.CLIENT_ID
+
+
 def get_brands_in_category(level: str, value: str) -> list[dict]:
     """Every brand competing in the category -> [{brand, client_id, is_client}].
     Per brand we keep the most relevant account: prefer one where it is the
