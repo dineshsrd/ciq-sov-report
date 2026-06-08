@@ -119,12 +119,24 @@ LIMIT 8000
 
 
 def best_client_for_category_query(level: str) -> str:
-    """The client_id with the most keyword coverage in the chosen L1/L2 —
-    used as the data source for category-mode reports (no focus brand)."""
+    """The client whose data in the chosen L1/L2 exposes the MOST distinct real
+    brands — gives the richest category leaderboard. Ranking by keyword coverage
+    alone could pick an account whose brand attribution is masked ('UNKNOWN'),
+    producing a useless single-brand landscape."""
     lvl = _check_level(level)
-    return (f"SELECT client_id, COUNT(DISTINCT search_term) AS kws "
-            f"FROM {_M()} WHERE {lvl} = :value "
-            f"GROUP BY client_id ORDER BY kws DESC LIMIT 1")
+    junk = ", ".join(f"'{b}'" for b in
+                     ("unknown", "unknown_brand", "null_value", "generic",
+                      "unbranded", "n/a", "na", "none", "other", "others", "misc", ""))
+    return f"""SELECT p.client_id, COUNT(DISTINCT p.brand) AS brands
+FROM {_P()} p
+JOIN (SELECT DISTINCT client_id, search_term FROM {_M()} WHERE {lvl} = :value) m
+  ON p.client_id = m.client_id AND p.search_term = m.search_term
+WHERE p.brand IS NOT NULL
+  AND lower(trim(p.brand)) NOT IN ({junk})
+  AND p.feed_date >= date_sub(current_date(), 30)
+GROUP BY p.client_id
+ORDER BY brands DESC
+LIMIT 1""".strip()
 
 
 def subcat_level_counts_query(l1_level: str) -> str:

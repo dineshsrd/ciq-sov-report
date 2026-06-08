@@ -706,11 +706,24 @@ if rep.get("mode") not in ("history", "category") and "kp" in rep:
 
 # ── Downloads ──────────────────────────────────────────────────────────--
 st.markdown("### 📤 Download & share")
-d1, d2 = st.columns(2)
 _nm = (rep["scope"].get("name")
        or f"{rep['scope'].get('brand_label', '')} {rep['scope'].get('category_value', '')}")
 fname = "".join(c if (c.isalnum() or c in " -_") else "_"
                 for c in _nm).strip().replace(" ", "_") or "report"
+
+# Explicit save-to-history (reports already auto-save on generate, but this
+# lets you (re)save an opened/edited report on demand — without downloading).
+if rep.get("mode") != "history":
+    if st.button("💾 Save report to history", use_container_width=True):
+        try:
+            _s = dict(rep["scope"])
+            _s.setdefault("brand_label", "📊 Category")
+            history.save_report(_s, rep["html"], rep.get("source", ""))
+            st.success("Saved to Report history (see the sidebar).")
+        except Exception as e:
+            st.error(f"Could not save: {e}")
+
+d1, d2 = st.columns(2)
 with d1:
     st.download_button("⬇️ Download interactive HTML", rep["html"],
                        file_name=f"{fname}.html", mime="text/html",

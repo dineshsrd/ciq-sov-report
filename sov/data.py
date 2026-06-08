@@ -113,7 +113,8 @@ def get_best_client_for_category(level: str, value: str) -> int | None:
             if df.empty:
                 return None
             return int(df.iloc[0]["client_id"])
-        key = f"bestclient_{_hash(level + '|' + value)}"
+        # v2 key: selection now ranks by real-brand richness, not keyword count.
+        key = f"bestclient2_{_hash(level + '|' + value)}"
         return _disk_cached(key, 6 * 3600, _p)
     return sample_data.CLIENT_ID
 

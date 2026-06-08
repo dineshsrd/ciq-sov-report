@@ -24,7 +24,7 @@ def _keys(df: pd.DataFrame) -> list[str]:
 
 
 JUNK_BRANDS = {"generic", "unbranded", "null_value", "n/a", "na", "none",
-               "other", "others", "misc", ""}
+               "other", "others", "misc", "unknown", "unknown_brand", ""}
 
 
 def is_junk_brand(name) -> bool:
