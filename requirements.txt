@@ -1,0 +1,20 @@
+# Core data + UI (single service)
+streamlit>=1.36
+pandas>=2.1
+numpy>=1.26
+plotly>=5.22
+
+# Config
+python-dotenv>=1.0
+
+# Live data source (Databricks SQL). Connection/auth handled by you.
+databricks-sql-connector>=3.1
+
+# Narrative generation (OpenAI). Optional at runtime — app falls back to a
+# template narrative if OPENAI_API_KEY is not set or the package is missing.
+openai>=1.30
+
+# PDF export via headless Chromium.
+# Works on local installs only (run: python -m playwright install chromium).
+# On Streamlit Community Cloud, PDF is unavailable — HTML download still works.
+# playwright>=1.44   <-- disabled for cloud; uncomment for local PDF support
