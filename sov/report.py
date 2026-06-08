@@ -234,6 +234,9 @@ body{font-family:var(--sans);background:var(--bg);color:var(--ink);line-height:1
 .hero .sub{max-width:740px;color:rgba(255,255,255,.85);font-size:16px;margin-top:18px}
 .heroband{margin-top:34px;display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.14);border-radius:14px;overflow:hidden}
 .heroband .cell{background:rgba(18,3,24,.55);padding:18px 20px}
+.heroband .cell.focus{background:rgba(194,49,255,.16);box-shadow:inset 3px 0 0 var(--electric)}
+.heroband .cell.focus .k{color:rgba(255,255,255,.85)}
+.heroband .youtag{font-family:var(--mono);font-size:8px;letter-spacing:.06em;background:var(--electric);color:#fff;border-radius:4px;padding:1px 5px;margin-left:5px;vertical-align:middle}
 .heroband .k{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,.55)}
 .heroband .v{font-size:29px;font-weight:800;margin-top:8px;letter-spacing:-.02em}
 .heroband .v.accent{color:var(--electric)}
@@ -347,6 +350,13 @@ def _initials(name: str) -> str:
     if len(parts) == 1:
         return parts[0][:2].upper()
     return (parts[0][:1] + parts[1][:1]).upper()
+
+
+def _sentence(s: str) -> str:
+    """Sentence case: capitalise the first letter, keep the rest as-is
+    (so existing capitalisation / acronyms are preserved)."""
+    s = str(s or "").strip()
+    return s[:1].upper() + s[1:] if s else s
 
 
 def _logo_url(name: str) -> str:
@@ -610,7 +620,7 @@ def _sku_opt_cards(items: list[dict]) -> str:
 
 def build_themed_report(scope: dict, ins: dict, d: dict,
                         narrative_source: str = "template") -> str:
-    cat = str(scope.get("category_value", ""))
+    cat = _sentence(scope.get("category_value", ""))
     brand = str(scope.get("brand_label", ""))
     h = d.get("hero", {})
     rank_txt = f" · #{h['rank']}" if h.get("rank") else ""
@@ -623,7 +633,8 @@ def build_themed_report(scope: dict, ins: dict, d: dict,
         f'<h1>Win Your <em>Share of Search</em><br>in {_html.escape(cat)}</h1>'
         f'<p class="sub">{_inl(ins.get("verdict", ""))}</p>'
         f'<div class="heroband">'
-        f'<div class="cell"><div class="k">{_html.escape(brand)} · your position</div>'
+        f'<div class="cell focus"><div class="k">{_html.escape(brand)} · your position '
+        f'<span class="youtag">YOU</span></div>'
         f'<div class="v accent">{h.get("your_sov", 0):.2f}<span class="u">% SOV{rank_txt}</span></div></div>'
         f'<div class="cell"><div class="k">Organic SOV</div>'
         f'<div class="v">{h.get("organic", 0):.2f}<span class="u">%</span></div></div>'
@@ -763,7 +774,7 @@ def build_category_report(scope: dict, ins: dict, d: dict,
     """Category-landscape report — no focus brand.
     Shows who owns the category, sub-category breakdown, and top keywords.
     CTA nudges the reader to find out where THEIR brand stands."""
-    cat = str(scope.get("category_value", ""))
+    cat = _sentence(scope.get("category_value", ""))
     src = "AI · OpenAI" if narrative_source == "openai" else "rule-based"
     h = d.get("hero", {})  # {top_brand, top_sov, brands, keywords}
 
