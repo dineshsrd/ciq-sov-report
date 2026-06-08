@@ -246,6 +246,7 @@ section{padding:46px 0;border-bottom:1px solid var(--line)}
 .badge{position:relative;width:36px;height:36px;border-radius:9px;flex:none;overflow:hidden;background:#fff;border:1px solid var(--line)}
 .badge .ini{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;color:#fff;background:var(--c,#8a7f99)}
 .badge.sm{width:27px;height:27px;border-radius:7px}.badge.sm .ini{font-size:10px}
+.badge .lg{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#fff;z-index:2}
 .lb{background:var(--paper);border:1px solid var(--line);border-radius:14px;overflow:hidden}
 .lbrow{display:grid;align-items:center;gap:16px;padding:13px 20px;border-top:1px solid var(--line)}
 .lbrow.head{background:var(--bg)}.lbrow:first-child{border-top:none}
@@ -348,10 +349,22 @@ def _initials(name: str) -> str:
     return (parts[0][:1] + parts[1][:1]).upper()
 
 
+def _logo_url(name: str) -> str:
+    """Best-effort brand logo from Clearbit's free logo CDN (no API key).
+    Guesses {slug}.com; if that 404s the <img> onerror reveals the initials."""
+    slug = re.sub(r"[^a-z0-9]", "", str(name).lower())
+    return f"https://logo.clearbit.com/{slug}.com" if slug else ""
+
+
 def _badge(name: str, color: str, sm: bool = True) -> str:
     cls = "badge sm" if sm else "badge"
+    logo = _logo_url(name)
+    # Initials sit underneath; the logo <img> layers on top and hides itself
+    # (revealing the initials) if the brand has no Clearbit logo.
+    img = (f'<img class="lg" src="{_html.escape(logo)}" alt="" loading="lazy" '
+           f'onerror="this.style.display=\'none\'">' if logo else "")
     return (f'<div class="{cls}" style="--c:{color}">'
-            f'<span class="ini">{_html.escape(_initials(name))}</span></div>')
+            f'<span class="ini">{_html.escape(_initials(name))}</span>{img}</div>')
 
 
 def _inl(s) -> str:

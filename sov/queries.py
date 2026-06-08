@@ -499,8 +499,8 @@ SELECT k.sku, i.title, i.image_url, i.product_page_url,
        ROUND(AVG(k.best_rank), 1) AS avg_rank,
        MIN(k.best_rank) AS best_rank,
        SUM(k.on_p1) AS page1_kws,
-       slice(sort_array(collect_list(
-             named_struct('r', k.best_rank, 't', k.search_term))), 1, 10) AS kw_ranked
+       collect_list(k.search_term) AS kw_list,
+       collect_list(k.best_rank) AS rank_list
 FROM kw k JOIN info i USING (sku)
 GROUP BY k.sku, i.title, i.image_url, i.product_page_url
 HAVING COUNT(*) >= 1 AND AVG(k.best_rank) > 3

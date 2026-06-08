@@ -430,37 +430,36 @@ def get_sku_detail(client_id: int, search_term: str) -> pd.DataFrame:
     return out.reset_index(drop=True)
 
 
-def _parse_kw_ranked(val) -> list[dict]:
-    """Parse Databricks ARRAY<STRUCT<r,t>> into [{'term','rank'}, ...].
-    Robust to list-of-dict, numpy array, Row-like, or JSON-string forms."""
-    out: list[dict] = []
-    if val is None:
-        return out
-    items = val
-    if isinstance(items, str):
+def _as_list(v) -> list:
+    """Normalise a Databricks array cell (list / numpy / JSON-string) to a list."""
+    if v is None:
+        return []
+    if isinstance(v, str):
         try:
-            items = _json.loads(items)
+            v = _json.loads(v)
         except Exception:
-            return out
+            return []
     try:
-        for it in items:
-            term = rank = None
-            if isinstance(it, dict):
-                term, rank = it.get("t"), it.get("r")
-            else:  # Row-like / namedtuple
-                try:
-                    term, rank = it["t"], it["r"]
-                except Exception:
-                    try:
-                        rank, term = it[0], it[1]
-                    except Exception:
-                        continue
-            if term is not None:
-                out.append({"term": str(term),
-                            "rank": float(rank) if rank is not None else 0.0})
+        return list(v)
     except TypeError:
-        pass
-    return out
+        return []
+
+
+def _zip_kw_ranked(kw_list, rank_list) -> list[dict]:
+    """Pair the parallel keyword / rank arrays into [{'term','rank'}], sorted
+    best-rank-first, capped at 10. Tolerant of length mismatch."""
+    kws, rks = _as_list(kw_list), _as_list(rank_list)
+    out = []
+    for i, term in enumerate(kws):
+        if term is None:
+            continue
+        try:
+            rank = float(rks[i]) if i < len(rks) and rks[i] is not None else 0.0
+        except (TypeError, ValueError):
+            rank = 0.0
+        out.append({"term": str(term), "rank": rank})
+    out.sort(key=lambda x: x["rank"])
+    return out[:10]
 
 
 def get_optimizable_skus(client_id: int, level: str | None,
@@ -482,9 +481,15 @@ def get_optimizable_skus(client_id: int, level: str | None,
                 df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0).astype(int)
         if "avg_rank" in df.columns:
             df["avg_rank"] = pd.to_numeric(df["avg_rank"], errors="coerce").fillna(0.0)
-        df["kw_ranked"] = df["kw_ranked"].map(_parse_kw_ranked) \
-            if "kw_ranked" in df.columns else [[] for _ in range(len(df))]
-        return df.reset_index(drop=True)
+        # Build kw_ranked = [{term, rank}] sorted best-rank-first from the two
+        # parallel collect_list arrays (robust to list / numpy / string forms).
+        df["kw_ranked"] = [
+            _zip_kw_ranked(kw, rk)
+            for kw, rk in zip(df.get("kw_list", [None] * len(df)),
+                              df.get("rank_list", [None] * len(df)))
+        ]
+        return df.drop(columns=[c for c in ("kw_list", "rank_list")
+                                if c in df.columns]).reset_index(drop=True)
     return _sample_optimizable_skus(client_id, level, category_value, focus_brand)
 
 

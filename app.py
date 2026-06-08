@@ -400,9 +400,13 @@ def _build_sku_opt(cid, level, category_value, focus_brand, kb):
     Returns a block for the report, or None if there's nothing to optimize."""
     try:
         opt_df = _opt_skus(cid, level, category_value, focus_brand)
-    except Exception:
+    except Exception as e:
+        st.warning(f"SKU optimization skipped — could not load SKU data: {e}")
         return None
     if opt_df is None or opt_df.empty:
+        st.info(f"SKU optimization: no underperforming {focus_brand} SKUs found "
+                f"in {category_value} (all tracked SKUs already rank near the top, "
+                f"or no SKU listings were captured for this brand/range).")
         return None
 
     # Highest-demand (trending) keywords in this category, by crawl volume.
