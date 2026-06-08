@@ -482,9 +482,40 @@ def get_optimizable_skus(client_id: int, level: str | None,
         if "avg_rank" in df.columns:
             df["avg_rank"] = pd.to_numeric(df["avg_rank"], errors="coerce").fillna(0.0)
         # Build kw_ranked = [{term, rank}] sorted best-rank-first from the two
-        # parallel collect_list arrays (robust to list / numpy / string forms).
+        # parallel collect_list arrays. Inlined (no module-level helper) so a
+        # partial Streamlit hot-reload can never leave this referencing an
+        # undefined name.
+        import json as _j
+
+        def _norm(v):
+            if v is None:
+                return []
+            if isinstance(v, str):
+                try:
+                    v = _j.loads(v)
+                except Exception:
+                    return []
+            try:
+                return list(v)
+            except TypeError:
+                return []
+
+        def _pair(kw_list, rank_list):
+            kws, rks = _norm(kw_list), _norm(rank_list)
+            out = []
+            for i, term in enumerate(kws):
+                if term is None:
+                    continue
+                try:
+                    rank = float(rks[i]) if i < len(rks) and rks[i] is not None else 0.0
+                except (TypeError, ValueError):
+                    rank = 0.0
+                out.append({"term": str(term), "rank": rank})
+            out.sort(key=lambda x: x["rank"])
+            return out[:10]
+
         df["kw_ranked"] = [
-            _zip_kw_ranked(kw, rk)
+            _pair(kw, rk)
             for kw, rk in zip(df.get("kw_list", [None] * len(df)),
                               df.get("rank_list", [None] * len(df)))
         ]
