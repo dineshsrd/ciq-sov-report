@@ -654,16 +654,18 @@ if rep.get("mode") not in ("history", "category") and "kp" in rep:
                     st.dataframe(_num(show), use_container_width=True, hide_index=True)
 
 # ── SKU Optimizer ─────────────────────────────────────────────────────--
-# Only shown for brand-mode reports of actual CIQ clients (they can act on it).
-if rep.get("mode") not in ("history", "category") and focus_is_client:
+# Shown for any brand deepdive report — client or competitor — whenever a
+# focus brand is set.  focus_is_client gate intentionally removed.
+if rep.get("mode") == "deepdive" and focus_brand:
     st.divider()
     with st.expander("🛍️ SKU Optimizer — Rufus-style listing recommendations",
                      expanded=False):
         st.caption(
-            "Pick one of your tracked ASINs. The optimizer analyses your current "
-            "title against page-1 keyword rankings and competitor listings, then "
-            "generates an optimized title, 5 benefit bullets, backend keywords, "
-            "and Rufus Q&A — ready to paste into Seller Central.")
+            f"Pick an ASIN from **{focus_brand}**'s tracked products. "
+            "The optimizer analyses the current title against page-1 keyword "
+            "rankings and competitor listings, then generates an optimized title, "
+            "5 benefit bullets, backend keywords, and Rufus Q&A prep — "
+            "ready to share with the brand's content team.")
 
         asins_df = _asins(cid, level, category_value, focus_brand)
 
