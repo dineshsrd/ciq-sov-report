@@ -127,6 +127,16 @@ def best_client_for_category_query(level: str) -> str:
             f"GROUP BY client_id ORDER BY kws DESC LIMIT 1")
 
 
+def subcat_level_counts_query(l1_level: str) -> str:
+    """Count distinct sub-category values at L2/L3/L4 under a chosen L1 for a
+    client — so the report can break down at the level with the most segments."""
+    l1 = _check_level(l1_level)
+    cols = ", ".join(
+        f"COUNT(DISTINCT {lv}) AS {lv}"
+        for lv in ("digital_shelf_l2", "digital_shelf_l3", "digital_shelf_l4"))
+    return f"SELECT {cols} FROM {_M()} WHERE client_id = :cid AND {l1} = :catval"
+
+
 def date_bounds_query() -> str:
     return (f"SELECT MIN(feed_date) AS min_d, MAX(feed_date) AS max_d "
             f"FROM {_P()} WHERE client_id = :cid")

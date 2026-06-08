@@ -470,7 +470,11 @@ def _build_deepdive(start, end):
     top_rival = rivals[0] if rivals else None
 
     lvl_n = int(level.rsplit("l", 1)[-1])
-    child_level = f"digital_shelf_l{lvl_n + 1}" if lvl_n < 10 else None
+    if lvl_n == 1:
+        # Break down at whichever child level (L2/L3/L4) has the most segments.
+        child_level = data.get_best_subcat_level(cid, level, category_value)
+    else:
+        child_level = f"digital_shelf_l{lvl_n + 1}" if lvl_n < 10 else None
     leaders = (data.get_category_leaders(cid, child_level, level, category_value,
                                          start, end, "all", cutoff, focus_brand)
                if child_level else None)

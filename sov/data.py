@@ -203,6 +203,30 @@ def get_client_brands(client_id: int) -> list[str]:
     return [sample_data.CLIENT_BRAND]
 
 
+def get_best_subcat_level(client_id: int, l1_level: str,
+                          l1_value: str) -> str | None:
+    """Pick the child taxonomy level (L2/L3/L4) with the MOST distinct
+    sub-categories under the chosen L1 — so the Sub-Category Leaders section
+    is as rich as the data allows. Falls back to L2."""
+    if not SETTINGS.is_live:
+        return "digital_shelf_l2"
+    try:
+        from . import queries
+        df = _run(queries.subcat_level_counts_query(l1_level),
+                  {"cid": int(client_id), "catval": l1_value})
+        if df.empty:
+            return "digital_shelf_l2"
+        row = df.iloc[0]
+        best, best_n = "digital_shelf_l2", 0
+        for lv in ("digital_shelf_l2", "digital_shelf_l3", "digital_shelf_l4"):
+            n = int(pd.to_numeric(row.get(lv, 0), errors="coerce") or 0)
+            if n > best_n:
+                best_n, best = n, lv
+        return best
+    except Exception:
+        return "digital_shelf_l2"
+
+
 def get_date_bounds(client_id: int) -> tuple[dt.date, dt.date]:
     if SETTINGS.is_live:
         def _producer():
