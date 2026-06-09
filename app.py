@@ -11,7 +11,6 @@ from pathlib import Path
 
 import pandas as pd
 import streamlit as st
-import streamlit.components.v1 as components
 
 from config import SETTINGS
 from sov import branding as B
@@ -879,7 +878,10 @@ elif rep.get("mode") == "incrementality":
     st.info(f"📈 **Incrementality Report** — {rep['scope'].get('brand_label','')} · "
             f"{rep['scope'].get('date_min','')} → {rep['scope'].get('date_max','')}")
 
-components.html(rep["html"], height=5200, scrolling=True)
+import tempfile as _tempfile, pathlib as _pathlib
+_tf = _pathlib.Path(_tempfile.gettempdir()) / "ciq_report_preview.html"
+_tf.write_text(rep["html"], encoding="utf-8")
+st.iframe(str(_tf), height=5200)
 
 if rep.get("mode") not in ("history", "category") and "kp" in rep:
     with st.expander("🛒 Product shelf — see the products winning a keyword"):
