@@ -90,7 +90,7 @@ _CTA = f"""<div class="cta">
     <div class="cta-body">CommerceIQ helps brands grow Share of Search and sales
       across Amazon and the digital shelf — turning insights like these into
       automated action.</div>
-    <a class="cta-btn" href="https://www.commerceiq.ai/">Talk to CommerceIQ →</a>
+    <a class="cta-btn" href="https://www.commerceiq.ai/demo">Talk to CommerceIQ →</a>
   </div>"""
 
 _STYLE = f"""
@@ -702,7 +702,7 @@ def build_themed_report(scope: dict, ins: dict, d: dict,
         f'<h2>Climb the {_html.escape(cat)} leaderboard.</h2>'
         '<p>We\'ll map your organic and paid share on every target term, pinpoint the '
         'keywords you can win fastest, and put CommerceIQ to work capturing them.</p>'
-        '<a class="btn" href="https://www.commerceiq.ai/">Talk to CommerceIQ &rarr;</a>'
+        '<a class="btn" href="https://www.commerceiq.ai/demo">Talk to CommerceIQ &rarr;</a>'
         '</div></section>')
 
     footer = (
@@ -843,7 +843,7 @@ def build_category_report(scope: dict, ins: dict, d: dict,
         '<p>CommerceIQ maps your organic and paid share on every target term, shows '
         'exactly who is winning and why, and puts automation to work capturing the '
         'share that is available.</p>'
-        '<a class="btn" href="https://www.commerceiq.ai/">'
+        '<a class="btn" href="https://www.commerceiq.ai/demo">'
         'See where you stand &rarr;</a>'
         '</div></section>')
 
