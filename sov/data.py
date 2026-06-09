@@ -649,6 +649,71 @@ def get_sov_incr_keywords(client_id: int, level: str, category_value: str,
                                      start, end, focus_brand)
 
 
+def get_sov_incr_all_levels(client_id: int, start: dt.date, end: dt.date,
+                            focus_brand: str, max_level: int = 5,
+                            l1_filter: list[str] | None = None) -> pd.DataFrame:
+    """Per-category organic vs paid SOV across L1-L{max_level} in one shot.
+    Each row has a `path` column like 'Pet Supplies > Dog Food > Wet Food'
+    built from the ancestor columns returned by the query."""
+    if SETTINGS.is_live:
+        from . import queries
+        params: dict = {"cid": int(client_id), "s": str(start), "e": str(end),
+                        "fbrand": focus_brand}
+        # Add L1 filter params (l1f0, l1f1, …)
+        if l1_filter:
+            for i, v in enumerate(l1_filter):
+                params[f"l1f{i}"] = v
+        df = _run(queries.sov_incr_all_levels_query(max_level, l1_filter),
+                  params)
+        for c in ("organic_sov", "paid_sov", "combined_sov", "crawls"):
+            if c in df.columns:
+                df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0.0)
+        if "keywords" in df.columns:
+            df["keywords"] = pd.to_numeric(df["keywords"], errors="coerce").fillna(0).astype(int)
+        # Build the breadcrumb path from ancestor columns (l1, l2, … l{max_level-1})
+        df["path"] = df.apply(lambda r: _build_path(r, max_level), axis=1)
+        return df
+    # Sample fallback: union L1-L5 from the single-level helper
+    frames = []
+    for i in range(1, max_level + 1):
+        lvl = f"digital_shelf_l{i}"
+        sub = _sample_sov_incr_overview(client_id, lvl, start, end, focus_brand)
+        if not sub.empty:
+            sub = sub.copy()
+            sub.insert(0, "level", f"L{i}")
+            frames.append(sub)
+    if not frames:
+        return pd.DataFrame(columns=["level", "category", "organic_sov",
+                                     "paid_sov", "combined_sov", "crawls",
+                                     "keywords", "path"])
+    out = pd.concat(frames, ignore_index=True)
+    # For sample mode, path = just the category (no ancestor info available)
+    out["path"] = out["category"]
+    if l1_filter:
+        # In sample mode filter by matching L1 category names for L1 rows,
+        # and by matching the category name prefix for child rows.
+        l1_set = set(str(v).strip().lower() for v in l1_filter)
+        # Keep L1 rows that match, and all child rows (can't filter without ancestors)
+        mask = (out["level"] == "L1") & out["category"].str.strip().str.lower().isin(l1_set)
+        mask = mask | (out["level"] != "L1")
+        out = out[mask].reset_index(drop=True)
+    return out
+
+
+def _build_path(row, max_level: int) -> str:
+    """Build 'L1 > L2 > L3' breadcrumb from ancestor columns."""
+    parts: list[str] = []
+    for j in range(1, max_level):
+        v = row.get(f"l{j}")
+        if pd.notna(v) and str(v).strip():
+            parts.append(str(v).strip())
+    # The leaf category itself
+    cat = str(row.get("category", "")).strip()
+    if cat and (not parts or parts[-1] != cat):
+        parts.append(cat)
+    return " > ".join(parts) if parts else cat
+
+
 def _sample_sov_incr_overview(client_id, level, start, end, focus_brand):
     raw = _sample_raw(client_id, None, None, start, end)
     if raw.empty or level not in raw.columns:

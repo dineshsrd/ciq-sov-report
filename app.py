@@ -102,6 +102,22 @@ def _overview(cid, level, start, end, mtype, cutoff, fbrand):
     return data.get_overview(cid, level, start, end, mtype, cutoff, fbrand)
 
 
+@st.cache_data(show_spinner="Analyzing organic vs paid across categories…")
+def _sov_incr_overview(cid, level, start, end, fbrand):
+    return data.get_sov_incr_overview(cid, level, start, end, fbrand)
+
+
+@st.cache_data(show_spinner="Analyzing organic vs paid across all category levels…")
+def _sov_incr_all_levels(cid, start, end, fbrand, max_level=5, l1_filter=None):
+    l1_list = list(l1_filter) if l1_filter else None
+    return data.get_sov_incr_all_levels(cid, start, end, fbrand, max_level, l1_list)
+
+
+@st.cache_data(show_spinner="Pulling keyword-level incrementality…")
+def _sov_incr_kws(cid, level, catval, start, end, fbrand):
+    return data.get_sov_incr_keywords(cid, level, catval, start, end, fbrand)
+
+
 def _num(df: pd.DataFrame) -> pd.DataFrame:
     """Prepend a 1..N number column for display."""
     d = df.copy()
@@ -172,6 +188,29 @@ with st.sidebar:
         date_range = st.date_input(f"Date range (last {MAX_DAYS} days max)",
                                    value=(earliest, hi),
                                    min_value=earliest, max_value=hi)
+
+        # ── 3 · L1 category filter ──────────────────────────────────────
+        st.header("3 · Choose L1 categories")
+        st.caption("Pick which top-level categories to analyze. "
+                   "Sub-categories (L2, L3, …) under each selected L1 "
+                   "will be included automatically.")
+        # Pull the brand's L1 categories
+        _incr_dates = (date_range if isinstance(date_range, (list, tuple))
+                       and len(date_range) == 2 else (earliest, hi))
+        _l1_ov = _sov_incr_overview(cid, "digital_shelf_l1",
+                                    _incr_dates[0], _incr_dates[1], focus_brand)
+        if _l1_ov.empty:
+            st.warning("No category data for this brand. Try a different date range.")
+            st.stop()
+        _l1_names = sorted(_l1_ov["category"].astype(str).tolist())
+        incr_l1_selected = st.multiselect(
+            "L1 categories", _l1_names, default=_l1_names,
+            help="De-select categories to narrow the analysis. "
+                 "All sub-levels (L2, L3, …) under selected L1s are included.")
+        if not incr_l1_selected:
+            st.warning("Select at least one L1 category.")
+            st.stop()
+
         mtype, cutoff, top_n = "all", "page_1", 15
         lens_label = "Combined (SP + Organic + SB)"
         _default_name = f"Incrementality: {focus_brand}"
@@ -679,32 +718,34 @@ def _build_category_report(start, end):
     return {"mode": "category", "scope": scope, "html": html, "source": src}
 
 
-@st.cache_data(show_spinner="Analyzing organic vs paid across categories…")
-def _sov_incr_overview(cid, level, start, end, fbrand):
-    return data.get_sov_incr_overview(cid, level, start, end, fbrand)
-
-
-@st.cache_data(show_spinner="Pulling keyword-level incrementality…")
-def _sov_incr_kws(cid, level, catval, start, end, fbrand):
-    return data.get_sov_incr_keywords(cid, level, catval, start, end, fbrand)
-
-
 def _build_incrementality_report(start, end):
     """Incrementality report — where the brand earns vs buys shelf space."""
-    ov = _sov_incr_overview(cid, "digital_shelf_l1", start, end, focus_brand)
-    if ov.empty:
-        st.warning("No data found for this brand. Try another or a different date range.")
-        return None
+    # Pass L1 filter as tuple (hashable for st.cache_data)
+    l1_sel = tuple(incr_l1_selected) if incr_l1_selected else None
+    all_levels_df = _sov_incr_all_levels(cid, start, end, focus_brand,
+                                         max_level=5, l1_filter=l1_sel)
 
-    # Classify each category
+    # Fallback: if the all-levels query returns nothing, try L1 only
+    if all_levels_df.empty:
+        ov = _sov_incr_overview(cid, "digital_shelf_l1", start, end, focus_brand)
+        if ov.empty:
+            st.warning("No data found for this brand. Try another or a different date range.")
+            return None
+        all_levels_df = ov.copy()
+        all_levels_df.insert(0, "level", "L1")
+        all_levels_df["path"] = all_levels_df["category"]
+
+    # Classify each category row (all levels)
     cat_rows = []
-    for _, r in ov.iterrows():
+    for _, r in all_levels_df.iterrows():
         cls = transforms.classify_incr(
             float(r.get("organic_sov", 0)),
             float(r.get("paid_sov", 0)),
             float(r.get("combined_sov", 0)))
         cat_rows.append({
+            "level": str(r.get("level", "L1")),
             "category": str(r["category"]),
+            "path": str(r.get("path", r["category"])),
             "organic_sov": float(r.get("organic_sov", 0)),
             "paid_sov": float(r.get("paid_sov", 0)),
             "combined_sov": float(r.get("combined_sov", 0)),
@@ -713,8 +754,11 @@ def _build_incrementality_report(start, end):
             "classification": cls,
         })
 
-    # Top 3 categories by crawl volume → pull keyword detail
-    top_cats = sorted(cat_rows, key=lambda c: c["crawls"], reverse=True)[:3]
+    # Also build L1-only subset for hero stats and keyword drill-down
+    l1_rows = [c for c in cat_rows if c["level"] == "L1"]
+
+    # Top 3 L1 categories by crawl volume → pull keyword detail
+    top_cats = sorted(l1_rows, key=lambda c: c["crawls"], reverse=True)[:3]
     all_kws: list[dict] = []
     detail_cat_name = ""
     for tc in top_cats:
@@ -753,13 +797,13 @@ def _build_incrementality_report(start, end):
         k = cls_key.get(kw["classification"], "balanced")
         kw_summary[k] = kw_summary.get(k, 0) + 1
 
-    # Hero stats
-    avg_org = sum(c["organic_sov"] for c in cat_rows) / len(cat_rows) if cat_rows else 0
-    avg_paid = sum(c["paid_sov"] for c in cat_rows) / len(cat_rows) if cat_rows else 0
+    # Hero stats (based on L1 categories for high-level summary)
+    avg_org = sum(c["organic_sov"] for c in l1_rows) / len(l1_rows) if l1_rows else 0
+    avg_paid = sum(c["paid_sov"] for c in l1_rows) / len(l1_rows) if l1_rows else 0
 
     scope = {
         "brand_label": focus_brand,
-        "category_value": f"{len(cat_rows)} categories",
+        "category_value": f"{len(l1_rows)} L1 categories ({len(cat_rows)} total across L1-L5)",
         "level_label": "Incrementality",
         "metric_label": "Organic vs Paid SOV",
         "date_min": str(start), "date_max": str(end),
@@ -768,7 +812,7 @@ def _build_incrementality_report(start, end):
 
     context = {
         "brand": focus_brand,
-        "categories": cat_rows,
+        "categories": l1_rows,  # narrative uses L1 summary
         "keyword_summary": kw_summary,
         "top_keywords_sample": all_kws[:20],
     }
@@ -777,11 +821,13 @@ def _build_incrementality_report(start, end):
 
     themed = {
         "hero": {
-            "categories": len(cat_rows),
+            "categories": len(l1_rows),
             "avg_organic": avg_org,
             "avg_paid": avg_paid,
+            "total_rows": len(cat_rows),
         },
-        "categories": cat_rows,
+        "categories": sorted(cat_rows, key=lambda c: (c["level"],
+                                                        c.get("path", c["category"]).lower())),
         "keyword_summary": kw_summary,
         "keywords": sorted(all_kws, key=lambda k: k["crawls"], reverse=True),
         "detail_category": detail_cat_name,

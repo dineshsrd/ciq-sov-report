@@ -922,6 +922,7 @@ _INC_TAG_DESCS = {
 
 
 def _incr_cat_grid(cats: list[dict]) -> str:
+    """Legacy card grid — kept as fallback."""
     if not cats:
         return ""
     out = ['<div class="inc-grid">']
@@ -945,8 +946,129 @@ def _incr_cat_grid(cats: list[dict]) -> str:
             f'<span>Organic <b>{org:.1f}%</b></span>'
             f'<span>Paid <b>{paid:.1f}%</b></span>'
             f'<span>Combined <b>{c.get("combined_sov", 0):.1f}%</b></span></div>'
-            f'<div class="inc-meta">{c.get("keywords", 0):,} keywords · '
-            f'{c.get("crawls", 0):,.0f} crawls</div></div>')
+            f'</div>')
+    out.append("</div>")
+    return "".join(out)
+
+
+_LVL_COLORS = {
+    "L1": "var(--purple)", "L2": "#5c2a8a", "L3": "var(--cobalt)",
+    "L4": "var(--sky)", "L5": "#8a7f99", "L6": "#8a7f99",
+    "L7": "#8a7f99", "L8": "#8a7f99", "L9": "#8a7f99", "L10": "#8a7f99",
+}
+
+
+def _incr_classification_legend() -> str:
+    """Inline legend table explaining each classification label and its threshold."""
+    rows = [
+        ("Dark Spot",        "⚫", "var(--muted2)", "Combined SOV &lt; 0.5%",
+         "No meaningful presence — untapped opportunity"),
+        ("Paid-dependent",   "🟡", "var(--cobalt)",  "Paid fraction &ge; 65%",
+         "Ads are the lifeline — low organic presence"),
+        ("Organic-led",      "🟢", "var(--electric)", "Paid fraction &le; 15%",
+         "Free traffic — protect this organic position"),
+        ("Cannibalizing",    "🔴", "#e05a00",        "Organic &ge; 2.5% AND Paid &ge; 1.5%",
+         "Paying for what you already own"),
+        ("Balanced",         "🔵", "var(--sky)",      "Everything else",
+         "Healthy organic + paid working together"),
+    ]
+    cells = "".join(
+        f'<tr>'
+        f'<td style="padding:8px 12px;white-space:nowrap">'
+        f'<span class="inc-tag" style="background:{color};font-size:10px">{ic} {label}</span></td>'
+        f'<td style="padding:8px 12px;font-family:var(--mono);font-size:12px;'
+        f'color:var(--muted)">{rule}</td>'
+        f'<td style="padding:8px 12px;font-size:13px;color:var(--ink)">{desc}</td>'
+        f'</tr>' for label, ic, color, rule, desc in rows)
+    return (
+        '<div style="background:var(--paper);border:1px solid var(--line);'
+        'border-radius:14px;overflow:hidden;margin-bottom:22px">'
+        '<div style="padding:12px 18px;border-bottom:1px solid var(--line);'
+        'background:var(--bg);font-family:var(--mono);font-size:10px;'
+        'letter-spacing:.1em;text-transform:uppercase;color:var(--muted2);'
+        'font-weight:600">Classification Guide</div>'
+        '<table style="width:100%;border-collapse:collapse;font-size:13px">'
+        '<tr style="background:var(--bg)">'
+        '<th style="padding:8px 12px;text-align:left;font-family:var(--mono);'
+        'font-size:9px;letter-spacing:.1em;text-transform:uppercase;'
+        'color:var(--muted2)">Pattern</th>'
+        '<th style="padding:8px 12px;text-align:left;font-family:var(--mono);'
+        'font-size:9px;letter-spacing:.1em;text-transform:uppercase;'
+        'color:var(--muted2)">Rule</th>'
+        '<th style="padding:8px 12px;text-align:left;font-family:var(--mono);'
+        'font-size:9px;letter-spacing:.1em;text-transform:uppercase;'
+        'color:var(--muted2)">What it means</th></tr>'
+        f'{cells}</table></div>')
+
+
+def _path_html(cat: dict) -> str:
+    """Render 'L1 > L2 > **Leaf**' breadcrumb from the path string.
+    The leaf (last segment) is bold; parents are muted."""
+    path = str(cat.get("path", "") or cat.get("category", ""))
+    parts = [p.strip() for p in path.split(">") if p.strip()]
+    if not parts:
+        return _html.escape(_sentence(str(cat.get("category", ""))))
+    if len(parts) == 1:
+        return f'<strong>{_html.escape(_sentence(parts[0]))}</strong>'
+    parents = " &rsaquo; ".join(
+        f'<span style="color:var(--muted2)">{_html.escape(_sentence(p))}</span>'
+        for p in parts[:-1])
+    leaf = f'<strong>{_html.escape(_sentence(parts[-1]))}</strong>'
+    return f'{parents} &rsaquo; {leaf}'
+
+
+def _incr_cat_table(cats: list[dict]) -> str:
+    """Multi-level table view: Level | Category path | SOV bar | Classification | KWs | Crawls.
+    Sorted by path so children sit under their parents."""
+    if not cats:
+        return ""
+    mx = max((c.get("combined_sov", 0) for c in cats), default=0) or 1.0
+    gcols = "grid-template-columns:54px 1fr 220px 140px"
+    out = [
+        f'<div class="lb">'
+        f'<div class="lbrow head" style="{gcols}">'
+        f'<span>Level</span><span>Category</span>'
+        f'<span>SOV (organic + paid)</span><span>Classification</span></div>'
+    ]
+    for c in cats:
+        org = c.get("organic_sov", 0)
+        paid = c.get("paid_sov", 0)
+        comb = c.get("combined_sov", 0)
+        total = org + paid or 1
+        wo = org / total * 100
+        wp = paid / total * 100
+        wc = min(100, comb / mx * 100)
+        cls = c.get("classification", "Balanced")
+        lvl = str(c.get("level", "L1"))
+        tag_color = _INC_TAG_COLORS.get(cls, "var(--muted2)")
+        lvl_color = _LVL_COLORS.get(lvl, "var(--muted2)")
+        # L1 rows get a subtle highlight
+        row_bg = ' style="background:rgba(33,2,53,.03)"' if lvl == "L1" else ""
+        # Indent child rows slightly
+        depth = int(lvl[1:]) if lvl[1:].isdigit() else 1
+        indent = (depth - 1) * 16
+        out.append(
+            f'<div class="lbrow" style="{gcols}"{row_bg}>'
+            # Level badge
+            f'<div><span style="display:inline-block;font-family:var(--mono);font-size:11px;'
+            f'font-weight:700;color:#fff;background:{lvl_color};padding:3px 10px;'
+            f'border-radius:6px">{_html.escape(lvl)}</span></div>'
+            # Category path (breadcrumb)
+            f'<div style="font-size:14px;min-width:0;overflow:hidden;'
+            f'text-overflow:ellipsis;white-space:nowrap;padding-left:{indent}px">'
+            f'{_path_html(c)}</div>'
+            # SOV stacked bar
+            f'<div class="metric"><div class="top"><span class="lab">SOV</span>'
+            f'<span class="num">{comb:.1f}%</span></div>'
+            f'<div class="mbar-track"><div class="mbar-fill" style="width:{wc:.1f}%;display:flex">'
+            f'<i class="seg-org" style="width:{wo:.0f}%"></i>'
+            f'<i class="seg-paid" style="width:{wp:.0f}%"></i></div></div>'
+            f'<div style="font-family:var(--mono);font-size:9px;color:var(--muted2);'
+            f'margin-top:2px">{org:.1f} org · {paid:.1f} paid</div></div>'
+            # Classification badge
+            f'<div><span class="inc-tag" style="background:{tag_color}">'
+            f'{_html.escape(cls)}</span></div>'
+            f'</div>')
     out.append("</div>")
     return "".join(out)
 
@@ -1032,13 +1154,14 @@ def build_incrementality_report(scope: dict, ins: dict, d: dict,
     secs = []
     n = 1
 
-    # Section: Category map
+    # Section: Category map — table view showing all taxonomy levels
     if d.get("categories"):
         legend = ('<span><i style="background:linear-gradient(90deg,#C231FF,#a01fe0)"></i>Organic</span>'
                   '<span><i style="background:linear-gradient(90deg,#5AAFFE,#1F22B2)"></i>Paid</span>')
+        cat_body = _incr_classification_legend() + _incr_cat_table(d["categories"])
         secs.append(_section(
             f"{n:02d}", "Category Incrementality Map",
-            ins.get("overview", ""), _incr_cat_grid(d["categories"]),
+            ins.get("overview", ""), cat_body,
             legend=legend))
         n += 1
 

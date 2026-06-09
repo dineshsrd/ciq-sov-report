@@ -617,6 +617,106 @@ LIMIT 30
 """.strip()
 
 
+def sov_incr_all_levels_query(max_level: int = 5,
+                              l1_filter: list[str] | None = None) -> str:
+    """Per-category organic vs paid SOV across L1-L{max_level} for a focus brand
+    in ONE query. Each row carries the FULL ancestry path (l1, l2, l3, …)
+    so the UI can render 'Pet Supplies > Dog Food > Wet Food'.
+
+    If `l1_filter` is given, only keywords under those L1 values are included.
+    """
+    # Build the metadata sub-selects.  Each level carries all ancestor columns
+    # so we can reconstruct the full path.
+    l1_where = ""
+    if l1_filter:
+        # Parameterised filter built from the safe list length
+        placeholders = ", ".join(f":l1f{i}" for i in range(len(l1_filter)))
+        l1_where = f" AND digital_shelf_l1 IN ({placeholders})"
+
+    parts: list[str] = []
+    for depth in range(1, max_level + 1):
+        col = f"digital_shelf_l{depth}"
+        _check_level(col)
+        # Ancestor columns: L1..L(depth-1) as context, L(depth) as `category`
+        ancestor_cols = ", ".join(
+            f"MAX(digital_shelf_l{j}) AS l{j}" for j in range(1, depth))
+        ancestor_group = ""
+        if depth > 1:
+            ancestor_cols = ", " + ancestor_cols
+            # group by all levels up to depth so the same leaf under different
+            # parents stays separate
+            ancestor_group = "".join(
+                f", digital_shelf_l{j}" for j in range(1, depth))
+        parts.append(
+            f"SELECT 'L{depth}' AS lvl, {col} AS category{ancestor_cols}, "
+            f"client_id, search_term "
+            f"FROM {_M()} "
+            f"WHERE client_id = :cid AND {col} IS NOT NULL{l1_where} "
+            f"GROUP BY {col}{ancestor_group}, client_id, search_term")
+    meta_union = " UNION ALL ".join(parts)
+
+    # Pad missing ancestor columns so the UNION schema matches
+    max_ancestors = max_level - 1
+    padded_parts: list[str] = []
+    for depth in range(1, max_level + 1):
+        col = f"digital_shelf_l{depth}"
+        _check_level(col)
+        anc_select = []
+        for j in range(1, max_ancestors + 1):
+            if j < depth:
+                anc_select.append(f"MAX(digital_shelf_l{j}) AS l{j}")
+            else:
+                anc_select.append(f"NULL AS l{j}")
+        anc_str = ", ".join(anc_select)
+        anc_group = "".join(
+            f", digital_shelf_l{j}" for j in range(1, depth))
+        padded_parts.append(
+            f"SELECT 'L{depth}' AS lvl, {col} AS category, {anc_str}, "
+            f"client_id, search_term "
+            f"FROM {_M()} "
+            f"WHERE client_id = :cid AND {col} IS NOT NULL{l1_where} "
+            f"GROUP BY {col}{anc_group}, client_id, search_term")
+    meta_union = " UNION ALL ".join(padded_parts)
+
+    # Ancestor columns to SELECT / GROUP in outer queries
+    anc_cols = ", ".join(f"m.l{j}" for j in range(1, max_ancestors + 1))
+    anc_grp = ", ".join(f"l{j}" for j in range(1, max_ancestors + 1))
+
+    return f"""
+WITH meta AS ({meta_union}),
+f AS (
+  SELECT m.lvl, m.category, {anc_cols},
+         p.search_term, p.feed_date, p.brand, p.no_of_crawls,
+         p.organic_page_1_count AS org, p.sp_page_1_count AS sp,
+         p.sb_page_1_count AS sb, p.all_page_1_count AS comb,
+         p.total_all_page_1_count AS tot
+  FROM {_P()} p
+  JOIN meta m ON p.client_id = m.client_id AND p.search_term = m.search_term
+  WHERE p.client_id = :cid AND p.feed_date BETWEEN :s AND :e
+),
+kd AS (
+  SELECT lvl, category, {anc_grp}, search_term, feed_date,
+         MAX(tot) AS t, MAX(no_of_crawls) AS cr,
+         SUM(CASE WHEN lower(trim(brand)) = lower(trim(:fbrand))
+                  THEN org ELSE 0 END) AS f_org,
+         SUM(CASE WHEN lower(trim(brand)) = lower(trim(:fbrand))
+                  THEN sp + sb ELSE 0 END) AS f_paid,
+         SUM(CASE WHEN lower(trim(brand)) = lower(trim(:fbrand))
+                  THEN comb ELSE 0 END) AS f_comb
+  FROM f GROUP BY lvl, category, {anc_grp}, search_term, feed_date
+)
+SELECT lvl AS level, category, {anc_grp},
+       100.0 * SUM(f_org)  / NULLIF(SUM(t), 0) AS organic_sov,
+       100.0 * SUM(f_paid) / NULLIF(SUM(t), 0) AS paid_sov,
+       100.0 * SUM(f_comb) / NULLIF(SUM(t), 0) AS combined_sov,
+       SUM(cr) AS crawls,
+       COUNT(DISTINCT search_term) AS keywords
+FROM kd GROUP BY lvl, category, {anc_grp}
+HAVING SUM(f_comb) > 0
+ORDER BY lvl, crawls DESC
+""".strip()
+
+
 def sov_incr_keywords_query(level: str) -> str:
     """Per-keyword organic vs paid SOV for a focus brand in one category.
     Both channels as points of total_all (same denominator)."""
