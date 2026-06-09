@@ -217,6 +217,111 @@ def _template_category(ctx: dict) -> dict:
             "keywords": keywords, "how_you_win": how_you_win}
 
 
+# ── Incrementality report insights ──────────────────────────────────────────
+INCR_SECTION_KEYS = ["verdict", "overview", "cannibalizing", "incremental",
+                      "opportunities", "how_you_win"]
+
+
+def generate_incrementality_insights(context: dict) -> tuple[dict, str]:
+    """Incrementality report insights — where a brand earns vs buys shelf space."""
+    if SETTINGS.openai_ready:
+        try:
+            return _openai_incrementality(context), "openai"
+        except Exception:
+            return _template_incrementality(context), "template"
+    return _template_incrementality(context), "template"
+
+
+def _openai_incrementality(context: dict) -> dict:
+    from openai import OpenAI
+
+    client = OpenAI(api_key=SETTINGS.openai_api_key)
+    system = (
+        "You are a senior retail-media analyst at CommerceIQ writing an "
+        "Incrementality Analysis report. This report shows where a brand "
+        "EARNS shelf space organically vs BUYS it through ads on Amazon — "
+        "using Share-of-Voice data, not ad-spend data. "
+        "The goal: help the brand reallocate ad focus from keywords where "
+        "they already win organically (cannibalization) to keywords where "
+        "ads are their only lifeline or where they have no presence. "
+        "Use ONLY the data in the JSON. Never invent figures. "
+        "Tone: strategic, action-oriented, CommerceIQ brand voice. "
+        "Return JSON with keys: " + ", ".join(INCR_SECTION_KEYS) + ". "
+        "'verdict' = 2-3 sentence headline on the brand's organic vs paid balance; "
+        "'overview' = read on the category landscape; "
+        "'cannibalizing' = keywords with strong organic AND paid — wasted overlap; "
+        "'incremental' = keywords where ads are the lifeline; "
+        "'opportunities' = high-demand keywords with no brand presence; "
+        "'how_you_win' = 2-4 sentence playbook plus a nudge to CommerceIQ. "
+        "Each value 1-3 sentences, under 60 words. Cite only exact numbers."
+    )
+    resp = client.chat.completions.create(
+        model=SETTINGS.openai_model,
+        messages=[{"role": "system", "content": system},
+                  {"role": "user", "content": json.dumps(context, default=str)}],
+        temperature=0.4, max_tokens=800,
+        response_format={"type": "json_object"},
+    )
+    data = json.loads(resp.choices[0].message.content)
+    return {k: str(data.get(k, "")).strip() for k in INCR_SECTION_KEYS}
+
+
+def _template_incrementality(ctx: dict) -> dict:
+    brand = ctx.get("brand", "Your brand")
+    cats = ctx.get("categories", [])
+    n_cats = len(cats)
+    ks = ctx.get("keyword_summary", {})
+    n_can = ks.get("cannibalizing", 0)
+    n_inc = ks.get("paid_dependent", 0)
+    n_org = ks.get("organic_led", 0)
+    n_dark = ks.get("dark_spot", 0)
+    n_total = ks.get("total", 0)
+
+    organic_led = [c for c in cats if c.get("classification") == "Organic-led"]
+    paid_dep = [c for c in cats if c.get("classification") == "Paid-dependent"]
+
+    verdict = (
+        f"{brand} appears across {n_cats} Amazon categories. "
+        + (f"{len(organic_led)} are organic-led (strong free visibility), "
+           f"{len(paid_dep)} are paid-dependent (ads are the lifeline). "
+           if organic_led or paid_dep else "")
+        + f"Across {n_total} tracked keywords, {n_can} show potential "
+          f"cannibalization where organic and paid overlap."
+    )
+    overview = (
+        f"Categories flagged 'Paid-dependent' would lose visibility if ads stopped; "
+        "'Organic-led' categories earn share without spend — the most efficient "
+        "presence. Understanding this balance is key to efficient budget allocation."
+    )
+    cannibalizing = (
+        f"{n_can} keywords have strong organic positioning AND active ad placements "
+        "— reducing paid focus here won't hurt visibility but frees resources for "
+        "higher-impact terms." if n_can else
+        "No significant cannibalization detected — paid placements are well-targeted."
+    )
+    incremental = (
+        f"{n_inc} keywords depend entirely on paid placements for visibility. "
+        f"These are {brand}'s highest-risk terms — cutting ads here means "
+        "disappearing from the shelf." if n_inc else
+        f"{brand} has organic coverage on most paid terms — ad dependency is low."
+    )
+    opportunities = (
+        f"{n_dark} high-demand keywords have no {brand} presence (organic or paid). "
+        "These are the highest-upside targets for new campaigns or content "
+        "optimization." if n_dark else
+        f"{brand} has broad keyword coverage — focus on deepening share."
+    )
+    how_you_win = (
+        "Shift focus from cannibalizing keywords to dark-spot opportunities. "
+        f"Protect the {n_org} organic strongholds with content rather than spend. "
+        "CommerceIQ can automate this reallocation across your entire portfolio "
+        "— let's talk."
+    )
+    return {"verdict": verdict, "overview": overview,
+            "cannibalizing": cannibalizing, "incremental": incremental,
+            "opportunities": opportunities, "how_you_win": how_you_win}
+
+
 def generate_narrative(context: dict) -> tuple[str, str]:
     """Return (narrative_markdown, source) where source is 'openai' or 'template'."""
     if SETTINGS.openai_ready:

@@ -338,8 +338,30 @@ section{padding:46px 0;border-bottom:1px solid var(--line)}
 footer{background:var(--ink);color:rgba(255,255,255,.6);padding:26px 0}
 footer .wrap{display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;font-size:12px;font-family:var(--mono)}
 footer b{color:#fff}
-@media(max-width:820px){.subgrid,.levers{grid-template-columns:1fr}}
+@media(max-width:820px){.subgrid,.levers,.inc-grid{grid-template-columns:1fr}}
 @media print{.hero,.cta,.topbar{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+.inc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:14px}
+.inc-card{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:18px;overflow:hidden}
+.inc-card-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.inc-cat-name{font-weight:700;font-size:15px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.inc-tag{font-family:var(--mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:#fff;padding:3px 10px;border-radius:100px;font-weight:600;flex:none}
+.inc-bar-wrap{margin:10px 0}
+.inc-bar{height:12px;background:var(--bg2);border-radius:6px;overflow:hidden;display:flex}
+.inc-stats{display:flex;gap:14px;font-family:var(--mono);font-size:11px;color:var(--muted2)}
+.inc-stats b{color:var(--ink)}
+.inc-meta{font-family:var(--mono);font-size:10px;color:var(--muted2);margin-top:8px}
+.inc-summary{display:grid;grid-template-columns:repeat(5,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-bottom:18px}
+.inc-summary .c{background:#fff;padding:18px;text-align:center}
+.inc-summary .ic{font-size:20px;margin-bottom:6px}
+.inc-summary .n{font-size:26px;font-weight:800}
+.inc-summary .l{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-top:4px}
+.inc-group{background:var(--paper);border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-bottom:14px}
+.inc-group-head{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--line);background:var(--bg)}
+.inc-group-icon{font-size:18px}
+.inc-group-title{font-weight:700;font-size:14px}
+.inc-group-desc{font-size:12px;color:var(--muted)}
+.inc-group-count{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--muted2);white-space:nowrap}
+.inc-group .kwline{padding:9px 18px}
 """
 
 
@@ -867,6 +889,236 @@ def build_category_report(scope: dict, ins: dict, d: dict,
         f'<div class="topbar"><div class="wrap">'
         f'<div class="brandlogo"><span class="dot"></span>CommerceIQ</div>'
         f'<div class="confid">Category Intelligence Report</div>'
+        f'</div></div>'
+        f'{hero}'
+        f'<main class="wrap">{"".join(secs)}</main>'
+        f'{cta}{footer}'
+        f'</body></html>'
+    )
+
+
+# ── Incrementality report builder ──────────────────────────────────────────
+_INC_TAG_COLORS = {
+    "Organic-led": "var(--electric)",
+    "Paid-dependent": "var(--cobalt)",
+    "Balanced": "var(--sky)",
+    "Cannibalizing": "#e05a00",
+    "Dark Spot": "var(--muted2)",
+}
+_INC_TAG_ICONS = {
+    "Cannibalizing": "🔴",
+    "Paid-dependent": "🟡",
+    "Organic-led": "🟢",
+    "Balanced": "🔵",
+    "Dark Spot": "⚫",
+}
+_INC_TAG_DESCS = {
+    "Cannibalizing": "Strong organic rank + active ads — potential wasted overlap",
+    "Paid-dependent": "Low organic presence, ads are your lifeline here",
+    "Organic-led": "Strong organic presence, minimal paid needed",
+    "Balanced": "Organic and paid working together",
+    "Dark Spot": "No meaningful brand presence — untapped opportunity",
+}
+
+
+def _incr_cat_grid(cats: list[dict]) -> str:
+    if not cats:
+        return ""
+    out = ['<div class="inc-grid">']
+    for c in cats:
+        org = c.get("organic_sov", 0)
+        paid = c.get("paid_sov", 0)
+        total = org + paid or 1
+        wo = org / total * 100
+        wp = paid / total * 100
+        cls = c.get("classification", "Balanced")
+        color = _INC_TAG_COLORS.get(cls, "var(--muted2)")
+        out.append(
+            f'<div class="inc-card">'
+            f'<div class="inc-card-head">'
+            f'<div class="inc-cat-name">{_html.escape(_sentence(str(c["category"])))}</div>'
+            f'<span class="inc-tag" style="background:{color}">{_html.escape(cls)}</span></div>'
+            f'<div class="inc-bar-wrap"><div class="inc-bar">'
+            f'<i class="seg-org" style="width:{wo:.0f}%"></i>'
+            f'<i class="seg-paid" style="width:{wp:.0f}%"></i></div></div>'
+            f'<div class="inc-stats">'
+            f'<span>Organic <b>{org:.1f}%</b></span>'
+            f'<span>Paid <b>{paid:.1f}%</b></span>'
+            f'<span>Combined <b>{c.get("combined_sov", 0):.1f}%</b></span></div>'
+            f'<div class="inc-meta">{c.get("keywords", 0):,} keywords · '
+            f'{c.get("crawls", 0):,.0f} crawls</div></div>')
+    out.append("</div>")
+    return "".join(out)
+
+
+def _incr_kw_summary(ks: dict) -> str:
+    items = [
+        ("🔴", ks.get("cannibalizing", 0), "Cannibalizing"),
+        ("🟡", ks.get("paid_dependent", 0), "Paid-dependent"),
+        ("🟢", ks.get("organic_led", 0), "Organic-led"),
+        ("🔵", ks.get("balanced", 0), "Balanced"),
+        ("⚫", ks.get("dark_spot", 0), "Dark Spot"),
+    ]
+    cells = "".join(
+        f'<div class="c"><div class="ic">{ic}</div>'
+        f'<div class="n">{n}</div><div class="l">{_html.escape(lab)}</div></div>'
+        for ic, n, lab in items)
+    return f'<div class="inc-summary">{cells}</div>'
+
+
+def _incr_kw_grouped(keywords: list[dict]) -> str:
+    if not keywords:
+        return ""
+    groups: dict[str, list[dict]] = {}
+    for kw in keywords:
+        groups.setdefault(kw.get("classification", "Balanced"), []).append(kw)
+    order = ["Cannibalizing", "Paid-dependent", "Organic-led", "Balanced", "Dark Spot"]
+    out: list[str] = []
+    for cls in order:
+        kws = groups.get(cls, [])
+        if not kws:
+            continue
+        mx = max((k.get("combined_sov", 0) for k in kws), default=0) or 1.0
+        icon = _INC_TAG_ICONS.get(cls, "")
+        desc = _INC_TAG_DESCS.get(cls, "")
+        out.append(
+            f'<div class="inc-group"><div class="inc-group-head">'
+            f'<span class="inc-group-icon">{icon}</span>'
+            f'<div><div class="inc-group-title">{_html.escape(cls)}</div>'
+            f'<div class="inc-group-desc">{_html.escape(desc)}</div></div>'
+            f'<span class="inc-group-count">{len(kws)} keywords</span></div>')
+        for kw in kws[:8]:
+            org = kw.get("organic_sov", 0)
+            paid = kw.get("paid_sov", 0)
+            comb = kw.get("combined_sov", 0)
+            total = org + paid or 1
+            wo = org / total * 100
+            wp = paid / total * 100
+            w = min(100, comb / mx * 100)
+            out.append(
+                f'<div class="kwline"><span class="kw">'
+                f'{_html.escape(str(kw["search_term"]))}</span>'
+                f'<span class="rk"><span class="demand" style="width:150px">'
+                f'<i style="width:{wo * w / 100:.0f}%;background:var(--electric)"></i>'
+                f'<i style="width:{wp * w / 100:.0f}%;background:var(--sky)"></i></span>'
+                f'<span class="rnum">org <b>{org:.1f}%</b> · paid <b>{paid:.1f}%</b>'
+                f'</span></span></div>')
+        out.append("</div>")
+    return "".join(out)
+
+
+def build_incrementality_report(scope: dict, ins: dict, d: dict,
+                                narrative_source: str = "template") -> str:
+    """Incrementality report — where a brand earns vs buys shelf space."""
+    brand = _html.escape(str(scope.get("brand_label", "")))
+    src = "AI · OpenAI" if narrative_source == "openai" else "rule-based"
+    h = d.get("hero", {})
+    ks = d.get("keyword_summary", {})
+
+    hero = (
+        f'<header class="hero"><div class="wrap">'
+        f'<div class="eyebrow">Incrementality Analysis · {brand} · Amazon</div>'
+        f'<h1>Where {brand} <em>Earns vs Buys</em> Shelf Space</h1>'
+        f'<p class="sub">{_inl(ins.get("verdict", ""))}</p>'
+        f'<div class="heroband">'
+        f'<div class="cell focus"><div class="k">{brand} <span class="youtag">YOU</span></div>'
+        f'<div class="v accent">{h.get("categories", 0)}<span class="u"> categories</span></div></div>'
+        f'<div class="cell"><div class="k">Organic SOV (avg)</div>'
+        f'<div class="v">{h.get("avg_organic", 0):.1f}<span class="u">%</span></div></div>'
+        f'<div class="cell"><div class="k">Paid SOV (avg)</div>'
+        f'<div class="v">{h.get("avg_paid", 0):.1f}<span class="u">%</span></div></div>'
+        f'</div></div></header>')
+
+    secs = []
+    n = 1
+
+    # Section: Category map
+    if d.get("categories"):
+        legend = ('<span><i style="background:linear-gradient(90deg,#C231FF,#a01fe0)"></i>Organic</span>'
+                  '<span><i style="background:linear-gradient(90deg,#5AAFFE,#1F22B2)"></i>Paid</span>')
+        secs.append(_section(
+            f"{n:02d}", "Category Incrementality Map",
+            ins.get("overview", ""), _incr_cat_grid(d["categories"]),
+            legend=legend))
+        n += 1
+
+    # Section: Keyword summary + grouped detail
+    if d.get("keywords"):
+        body = _incr_kw_summary(ks) + _incr_kw_grouped(d["keywords"])
+        top_cat = d.get("detail_category", "")
+        title = (f"Keyword Incrementality — {_sentence(top_cat)}"
+                 if top_cat else "Keyword Incrementality Breakdown")
+        secs.append(_section(f"{n:02d}", title,
+                             ins.get("cannibalizing", ""), body,
+                             note=ins.get("incremental", "")))
+        n += 1
+
+    # Section: Reallocation signals
+    n_can = ks.get("cannibalizing", 0)
+    n_dark = ks.get("dark_spot", 0)
+    realloc = (
+        '<div class="levers">'
+        f'<div class="lever org"><div class="tag">Signal 01 · Reduce overlap</div>'
+        f'<h3>{n_can} Cannibalizing Keywords</h3>'
+        '<p>These keywords already rank well organically — the brand appears on '
+        'page 1 without ads. Reducing paid focus here frees resources for '
+        'higher-impact terms without losing shelf presence.</p></div>'
+        f'<div class="lever paid"><div class="tag">Signal 02 · Fill gaps</div>'
+        f'<h3>{n_dark} Dark-Spot Opportunities</h3>'
+        '<p>High-demand keywords where the brand has no presence — organic or paid. '
+        'These are the highest-upside targets: each one is a shelf position '
+        'competitors hold that this brand doesn\'t contest.</p></div></div>')
+    secs.append(_section(f"{n:02d}", "Budget Reallocation Signals",
+                         ins.get("opportunities", ""), realloc))
+    n += 1
+
+    # How you win
+    levers = (
+        '<div class="levers">'
+        '<div class="lever org"><div class="tag">Lever 01 · Organic</div>'
+        '<h3>Earn share with content</h3>'
+        '<p>Optimize listing titles, bullets, and backend keywords for the terms '
+        'where the brand has paid presence but weak organic — convert paid '
+        'dependency into durable organic share that compounds over time.</p></div>'
+        '<div class="lever paid"><div class="tag">Lever 02 · Paid</div>'
+        '<h3>Buy share where it\'s incremental</h3>'
+        '<p>Focus ad spend on keywords where organic rank is low but demand is '
+        'high — the truly incremental placements. Every dollar here captures '
+        'a shopper who would otherwise go to a competitor.</p></div></div>')
+    secs.append(_section(f"{n:02d}", "How You Win — Organic + Paid Strategy",
+                         ins.get("how_you_win", ""), levers))
+
+    cta = (
+        '<section class="cta"><div class="wrap">'
+        '<div class="eyebrow" style="color:var(--sky)">'
+        'CommerceIQ Incrementality Intelligence</div>'
+        f'<h2>Stop paying for what you already own.</h2>'
+        '<p>CommerceIQ identifies every cannibalizing keyword, every paid-dependent '
+        'term, and every dark-spot opportunity — then automates the reallocation '
+        'across your entire catalog.</p>'
+        '<a class="btn" href="https://www.commerceiq.ai/demo">Talk to CommerceIQ &rarr;</a>'
+        '</div></section>')
+
+    footer = (
+        '<footer><div class="wrap">'
+        f'<span>&#169; CommerceIQ &middot; Incrementality Analysis</span>'
+        f'<span>Brand: {brand} &middot; '
+        f'{_html.escape(str(scope.get("date_min", "")))} &rarr; '
+        f'{_html.escape(str(scope.get("date_max", "")))}</span>'
+        f'<span>Insights: {src}</span></div></footer>')
+
+    return (
+        f'<!doctype html><html lang="en"><head><meta charset="utf-8">'
+        f'<meta name="viewport" content="width=device-width, initial-scale=1">'
+        f'<title>{_html.escape(str(scope.get("name") or f"Incrementality — {brand}"))}</title>'
+        f'<link rel="preconnect" href="https://fonts.googleapis.com">'
+        f'<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:'
+        f'wght@400;500;600;700;800;900&family=IBM+Plex+Mono:wght@400;500;600'
+        f'&display=swap" rel="stylesheet">'
+        f'<style>{_THEME_CSS}</style></head><body>'
+        f'<div class="topbar"><div class="wrap">'
+        f'<div class="brandlogo"><span class="dot"></span>CommerceIQ</div>'
+        f'<div class="confid">Incrementality Analysis Report</div>'
         f'</div></div>'
         f'{hero}'
         f'<main class="wrap">{"".join(secs)}</main>'

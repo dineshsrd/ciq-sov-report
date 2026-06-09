@@ -614,6 +614,103 @@ def get_competitor_titles(client_id: int, sku: str) -> pd.DataFrame:
     return pd.DataFrame(columns=["sku", "title", "brand", "kw_count", "avg_rank"])
 
 
+# ── SOV-based incrementality (no ad-spend data) ────────────────────────────
+def get_sov_incr_overview(client_id: int, level: str, start: dt.date,
+                          end: dt.date, focus_brand: str) -> pd.DataFrame:
+    """Per-category organic vs paid SOV for the brand."""
+    if SETTINGS.is_live:
+        from . import queries
+        df = _run(queries.sov_incr_overview_query(level),
+                  {"cid": int(client_id), "s": str(start), "e": str(end),
+                   "fbrand": focus_brand})
+        for c in ("organic_sov", "paid_sov", "combined_sov", "crawls"):
+            if c in df.columns:
+                df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0.0)
+        if "keywords" in df.columns:
+            df["keywords"] = pd.to_numeric(df["keywords"], errors="coerce").fillna(0).astype(int)
+        return df
+    return _sample_sov_incr_overview(client_id, level, start, end, focus_brand)
+
+
+def get_sov_incr_keywords(client_id: int, level: str, category_value: str,
+                          start: dt.date, end: dt.date,
+                          focus_brand: str) -> pd.DataFrame:
+    """Per-keyword organic vs paid SOV for the brand in one category."""
+    if SETTINGS.is_live:
+        from . import queries
+        df = _run(queries.sov_incr_keywords_query(level),
+                  {"cid": int(client_id), "catval": category_value,
+                   "s": str(start), "e": str(end), "fbrand": focus_brand})
+        for c in ("organic_sov", "paid_sov", "combined_sov", "crawls"):
+            if c in df.columns:
+                df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0.0)
+        return df
+    return _sample_sov_incr_keywords(client_id, level, category_value,
+                                     start, end, focus_brand)
+
+
+def _sample_sov_incr_overview(client_id, level, start, end, focus_brand):
+    raw = _sample_raw(client_id, None, None, start, end)
+    if raw.empty or level not in raw.columns:
+        return pd.DataFrame(columns=["category", "organic_sov", "paid_sov",
+                                     "combined_sov", "crawls", "keywords"])
+    from .metrics import numerator_col, denominator_col
+    o_num = numerator_col("organic", "page_1")
+    sp_num = numerator_col("sp", "page_1")
+    sb_num = numerator_col("sb", "page_1")
+    a_den = denominator_col("all", "page_1")
+    a_num = numerator_col("all", "page_1")
+    fb = str(focus_brand).strip().lower()
+    rows = []
+    for cat, sub in raw.groupby(level, dropna=False):
+        if pd.isna(cat):
+            continue
+        base = transforms._dedup_sum(sub, a_den)
+        if not base:
+            continue
+        cl = sub[sub["brand"].astype(str).str.strip().str.lower() == fb]
+        org = float(100.0 * cl[o_num].sum() / base)
+        paid = float(100.0 * (cl[sp_num].sum() + cl.get(sb_num, pd.Series([0])).sum()) / base)
+        comb = float(100.0 * cl[a_num].sum() / base)
+        if comb > 0:
+            rows.append({"category": str(cat), "organic_sov": org, "paid_sov": paid,
+                         "combined_sov": comb,
+                         "crawls": transforms._dedup_sum(sub, "no_of_crawls"),
+                         "keywords": int(sub["search_term"].nunique())})
+    return pd.DataFrame(rows).sort_values("crawls", ascending=False).reset_index(drop=True)
+
+
+def _sample_sov_incr_keywords(client_id, level, category_value, start, end, focus_brand):
+    raw = _sample_raw(client_id, level, category_value, start, end)
+    if raw.empty:
+        return pd.DataFrame(columns=["search_term", "organic_sov", "paid_sov",
+                                     "combined_sov", "crawls"])
+    from .metrics import numerator_col, denominator_col
+    o_num = numerator_col("organic", "page_1")
+    sp_num = numerator_col("sp", "page_1")
+    sb_num = numerator_col("sb", "page_1")
+    a_den = denominator_col("all", "page_1")
+    a_num = numerator_col("all", "page_1")
+    fb = str(focus_brand).strip().lower()
+    cl = raw[raw["brand"].astype(str).str.strip().str.lower() == fb]
+    base_kw = raw.groupby(["search_term", "feed_date"])[a_den].max().groupby("search_term").sum()
+    crawls = raw.groupby(["search_term", "feed_date"])["no_of_crawls"].max().groupby("search_term").sum()
+    org_kw = cl.groupby("search_term")[o_num].sum()
+    sp_kw = cl.groupby("search_term")[sp_num].sum()
+    sb_col = sb_num if sb_num in cl.columns else None
+    sb_kw = cl.groupby("search_term")[sb_num].sum() if sb_col else 0
+    paid_kw = sp_kw + sb_kw
+    comb_kw = cl.groupby("search_term")[a_num].sum()
+    out = pd.DataFrame({
+        "organic_sov": 100.0 * org_kw / base_kw,
+        "paid_sov": 100.0 * paid_kw / base_kw,
+        "combined_sov": 100.0 * comb_kw / base_kw,
+        "crawls": crawls}).fillna(0.0).reset_index()
+    out = out.rename(columns={"index": "search_term"})
+    out = out[out["combined_sov"] > 0]
+    return out.sort_values("crawls", ascending=False).head(200).reset_index(drop=True)
+
+
 def get_region_share(client_id: int, level: str | None,
                      category_value: str | None,
                      focus_brand: str) -> pd.DataFrame:

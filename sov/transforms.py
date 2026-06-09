@@ -180,6 +180,22 @@ def _classify_increment(r) -> str:
     return "Balanced"
 
 
+def classify_incr(organic_sov: float, paid_sov: float,
+                  combined_sov: float) -> str:
+    """Classify a keyword or category by its organic vs paid balance.
+    Used by the SOV-based incrementality report."""
+    if combined_sov < 0.5:
+        return "Dark Spot"
+    paid_frac = paid_sov / combined_sov if combined_sov > 0 else 0
+    if paid_frac >= 0.65:
+        return "Paid-dependent"
+    if paid_frac <= 0.15:
+        return "Organic-led"
+    if organic_sov >= 2.5 and paid_sov >= 1.5:
+        return "Cannibalizing"
+    return "Balanced"
+
+
 # ── SOV trend over time (raw grain only) ─────────────────────────────────
 def _period(s: pd.Series, freq: str) -> pd.Series:
     s = pd.to_datetime(s)

@@ -134,81 +134,114 @@ with st.sidebar:
     # ── Mode selector ────────────────────────────────────────────────────
     report_mode = st.radio(
         "Report type",
-        ["🔍 Brand Report", "📊 Category Report"],
+        ["🔍 Brand Report", "📊 Category Report", "📈 Incrementality"],
         horizontal=True,
         help="**Brand Report** — pick one brand and see how it ranks vs competitors.\n\n"
              "**Category Report** — see the full category landscape with no focus brand; "
-             "great for prospect outreach.")
+             "great for prospect outreach.\n\n"
+             "**Incrementality** — where a brand earns shelf space organically vs "
+             "buys it through ads, across all its categories.")
     is_category_mode = report_mode == "📊 Category Report"
+    is_incr_mode = report_mode == "📈 Incrementality"
 
     st.divider()
 
-    # ── 1 · Category pickers (shared by both modes) ──────────────────────
-    st.header("1 · Choose a category")
-    l1_pairs = _l1_values()
-    if not l1_pairs:
-        st.error("No categories found.")
-        st.stop()
-    l1_opts = [f"{v}  ({k:,} kw)" for v, k in l1_pairs]
-    l1_lookup = {f"{v}  ({k:,} kw)": (v, k) for v, k in l1_pairs}
-    l1_choice = st.selectbox("Category L1", l1_opts,
-                             help="Pick the category you care about.")
-    l1, l1_kw = l1_lookup[l1_choice]
-
-    l2_pairs = _l2_values(l1)
-    L2_ALL = f"— All of {l1} —"
-    l2_opts = [L2_ALL] + [f"{v}  ({k:,} kw)" for v, k in l2_pairs]
-    l2_lookup = {f"{v}  ({k:,} kw)": (v, k) for v, k in l2_pairs}
-    l2_choice = st.selectbox("Category L2 (optional)", l2_opts)
-    if l2_choice == L2_ALL:
-        level, category_value, selected_kw = "digital_shelf_l1", l1, l1_kw
-    else:
-        l2v, l2k = l2_lookup[l2_choice]
-        level, category_value, selected_kw = "digital_shelf_l2", l2v, l2k
-
-    # ── 2 · Brand picker (brand mode only) ───────────────────────────────
-    if not is_category_mode:
-        st.header("2 · Pick a brand to analyze")
-        cat_brands = _brands_in_cat(level, category_value)
-        if not cat_brands:
-            st.warning("No brands found competing in this category. Try another.")
+    if is_incr_mode:
+        # ── Incrementality: brand picker (global) ────────────────────────
+        st.header("1 · Choose a brand")
+        all_brands = _brands()
+        if not all_brands:
+            st.error("No brands found.")
             st.stop()
-        names = [b["brand"] for b in cat_brands]
-        brand_name = st.selectbox(
-            f"Brands in {category_value}", names,
-            help="Brands tracked in this category. The report highlights the one you pick.")
-        focus = cat_brands[names.index(brand_name)]
-        cid, focus_brand = focus["client_id"], focus["brand"]
-        focus_is_client = bool(focus.get("is_client", True))
-    else:
-        # Category mode: resolve best client_id for date-range bounds
-        focus_brand = None
-        focus_is_client = False
-        cid_for_bounds = _best_cid_for_cat(level, category_value)
-        if not cid_for_bounds:
-            st.warning("No data found for this category. Try a different one.")
-            st.stop()
-        cid = cid_for_bounds
+        brand_names_list = [b["brand"] for b in all_brands]
+        incr_brand = st.selectbox(
+            "Brand", brand_names_list,
+            help="Pick any brand — we'll find every category it competes in and "
+                 "analyze organic vs paid balance.")
+        incr_focus = all_brands[brand_names_list.index(incr_brand)]
+        cid = incr_focus["client_id"]
+        focus_brand = incr_focus["brand"]
+        focus_is_client = True  # from brands_query (client brands only)
+        level = "digital_shelf_l1"
+        category_value = None
+        selected_kw = 0
 
-    # ── 3 · Measure settings ─────────────────────────────────────────────
-    step_label = "3 · How to measure" if not is_category_mode else "2 · Date range"
-    st.header(step_label)
-    lo, hi = _bounds(cid)
-    earliest = max(lo, hi - dt.timedelta(days=MAX_DAYS))
-    date_range = st.date_input(f"Date range (last {MAX_DAYS} days max)",
-                               value=(earliest, hi),
-                               min_value=earliest, max_value=hi)
-
-    if not is_category_mode:
-        lens_label = st.radio("Ad type", list(LENS.keys()), index=0)
-        mtype = LENS[lens_label]
-        cutoff = st.selectbox("Position", list(CUTOFFS.keys()), index=0,
-                              format_func=lambda x: CUTOFFS[x])
-        top_n = st.slider("Keywords to show", 5, 30, 15)
-        _default_name = f"{focus_brand} — {category_value}"
-    else:
+        st.header("2 · Date range")
+        lo, hi = _bounds(cid)
+        earliest = max(lo, hi - dt.timedelta(days=MAX_DAYS))
+        date_range = st.date_input(f"Date range (last {MAX_DAYS} days max)",
+                                   value=(earliest, hi),
+                                   min_value=earliest, max_value=hi)
         mtype, cutoff, top_n = "all", "page_1", 15
-        _default_name = f"Category: {category_value}"
+        lens_label = "Combined (SP + Organic + SB)"
+        _default_name = f"Incrementality: {focus_brand}"
+
+    else:
+        # ── 1 · Category pickers (shared by brand + category modes) ──────
+        st.header("1 · Choose a category")
+        l1_pairs = _l1_values()
+        if not l1_pairs:
+            st.error("No categories found.")
+            st.stop()
+        l1_opts = [f"{v}  ({k:,} kw)" for v, k in l1_pairs]
+        l1_lookup = {f"{v}  ({k:,} kw)": (v, k) for v, k in l1_pairs}
+        l1_choice = st.selectbox("Category L1", l1_opts,
+                                 help="Pick the category you care about.")
+        l1, l1_kw = l1_lookup[l1_choice]
+
+        l2_pairs = _l2_values(l1)
+        L2_ALL = f"— All of {l1} —"
+        l2_opts = [L2_ALL] + [f"{v}  ({k:,} kw)" for v, k in l2_pairs]
+        l2_lookup = {f"{v}  ({k:,} kw)": (v, k) for v, k in l2_pairs}
+        l2_choice = st.selectbox("Category L2 (optional)", l2_opts)
+        if l2_choice == L2_ALL:
+            level, category_value, selected_kw = "digital_shelf_l1", l1, l1_kw
+        else:
+            l2v, l2k = l2_lookup[l2_choice]
+            level, category_value, selected_kw = "digital_shelf_l2", l2v, l2k
+
+        # ── 2 · Brand picker (brand mode only) ──────────────────────────
+        if not is_category_mode:
+            st.header("2 · Pick a brand to analyze")
+            cat_brands = _brands_in_cat(level, category_value)
+            if not cat_brands:
+                st.warning("No brands found competing in this category. Try another.")
+                st.stop()
+            names = [b["brand"] for b in cat_brands]
+            brand_name = st.selectbox(
+                f"Brands in {category_value}", names,
+                help="Brands tracked in this category. The report highlights the one you pick.")
+            focus = cat_brands[names.index(brand_name)]
+            cid, focus_brand = focus["client_id"], focus["brand"]
+            focus_is_client = bool(focus.get("is_client", True))
+        else:
+            focus_brand = None
+            focus_is_client = False
+            cid_for_bounds = _best_cid_for_cat(level, category_value)
+            if not cid_for_bounds:
+                st.warning("No data found for this category. Try a different one.")
+                st.stop()
+            cid = cid_for_bounds
+
+        # ── 3 · Measure settings ─────────────────────────────────────────
+        step_label = "3 · How to measure" if not is_category_mode else "2 · Date range"
+        st.header(step_label)
+        lo, hi = _bounds(cid)
+        earliest = max(lo, hi - dt.timedelta(days=MAX_DAYS))
+        date_range = st.date_input(f"Date range (last {MAX_DAYS} days max)",
+                                   value=(earliest, hi),
+                                   min_value=earliest, max_value=hi)
+
+        if not is_category_mode:
+            lens_label = st.radio("Ad type", list(LENS.keys()), index=0)
+            mtype = LENS[lens_label]
+            cutoff = st.selectbox("Position", list(CUTOFFS.keys()), index=0,
+                                  format_func=lambda x: CUTOFFS[x])
+            top_n = st.slider("Keywords to show", 5, 30, 15)
+            _default_name = f"{focus_brand} — {category_value}"
+        else:
+            mtype, cutoff, top_n = "all", "page_1", 15
+            _default_name = f"Category: {category_value}"
 
     report_name = st.text_input(
         "Report name", value="", placeholder=_default_name,
@@ -646,13 +679,126 @@ def _build_category_report(start, end):
     return {"mode": "category", "scope": scope, "html": html, "source": src}
 
 
+@st.cache_data(show_spinner="Analyzing organic vs paid across categories…")
+def _sov_incr_overview(cid, level, start, end, fbrand):
+    return data.get_sov_incr_overview(cid, level, start, end, fbrand)
+
+
+@st.cache_data(show_spinner="Pulling keyword-level incrementality…")
+def _sov_incr_kws(cid, level, catval, start, end, fbrand):
+    return data.get_sov_incr_keywords(cid, level, catval, start, end, fbrand)
+
+
+def _build_incrementality_report(start, end):
+    """Incrementality report — where the brand earns vs buys shelf space."""
+    ov = _sov_incr_overview(cid, "digital_shelf_l1", start, end, focus_brand)
+    if ov.empty:
+        st.warning("No data found for this brand. Try another or a different date range.")
+        return None
+
+    # Classify each category
+    cat_rows = []
+    for _, r in ov.iterrows():
+        cls = transforms.classify_incr(
+            float(r.get("organic_sov", 0)),
+            float(r.get("paid_sov", 0)),
+            float(r.get("combined_sov", 0)))
+        cat_rows.append({
+            "category": str(r["category"]),
+            "organic_sov": float(r.get("organic_sov", 0)),
+            "paid_sov": float(r.get("paid_sov", 0)),
+            "combined_sov": float(r.get("combined_sov", 0)),
+            "crawls": float(r.get("crawls", 0)),
+            "keywords": int(r.get("keywords", 0)),
+            "classification": cls,
+        })
+
+    # Top 3 categories by crawl volume → pull keyword detail
+    top_cats = sorted(cat_rows, key=lambda c: c["crawls"], reverse=True)[:3]
+    all_kws: list[dict] = []
+    detail_cat_name = ""
+    for tc in top_cats:
+        try:
+            kdf = _sov_incr_kws(cid, "digital_shelf_l1", tc["category"],
+                                start, end, focus_brand)
+            if kdf.empty:
+                continue
+            if not detail_cat_name:
+                detail_cat_name = tc["category"]
+            for _, kr in kdf.iterrows():
+                cls = transforms.classify_incr(
+                    float(kr.get("organic_sov", 0)),
+                    float(kr.get("paid_sov", 0)),
+                    float(kr.get("combined_sov", 0)))
+                all_kws.append({
+                    "search_term": str(kr["search_term"]),
+                    "organic_sov": float(kr.get("organic_sov", 0)),
+                    "paid_sov": float(kr.get("paid_sov", 0)),
+                    "combined_sov": float(kr.get("combined_sov", 0)),
+                    "crawls": float(kr.get("crawls", 0)),
+                    "classification": cls,
+                    "category": tc["category"],
+                })
+        except Exception:
+            continue
+
+    # Keyword summary counts
+    kw_summary = {"total": len(all_kws), "cannibalizing": 0,
+                  "paid_dependent": 0, "organic_led": 0, "balanced": 0,
+                  "dark_spot": 0}
+    cls_key = {"Cannibalizing": "cannibalizing", "Paid-dependent": "paid_dependent",
+               "Organic-led": "organic_led", "Balanced": "balanced",
+               "Dark Spot": "dark_spot"}
+    for kw in all_kws:
+        k = cls_key.get(kw["classification"], "balanced")
+        kw_summary[k] = kw_summary.get(k, 0) + 1
+
+    # Hero stats
+    avg_org = sum(c["organic_sov"] for c in cat_rows) / len(cat_rows) if cat_rows else 0
+    avg_paid = sum(c["paid_sov"] for c in cat_rows) / len(cat_rows) if cat_rows else 0
+
+    scope = {
+        "brand_label": focus_brand,
+        "category_value": f"{len(cat_rows)} categories",
+        "level_label": "Incrementality",
+        "metric_label": "Organic vs Paid SOV",
+        "date_min": str(start), "date_max": str(end),
+        "name": (report_name.strip() or f"Incrementality: {focus_brand}"),
+    }
+
+    context = {
+        "brand": focus_brand,
+        "categories": cat_rows,
+        "keyword_summary": kw_summary,
+        "top_keywords_sample": all_kws[:20],
+    }
+    with st.spinner("Writing incrementality insights…"):
+        ins, src = narrative.generate_incrementality_insights(context)
+
+    themed = {
+        "hero": {
+            "categories": len(cat_rows),
+            "avg_organic": avg_org,
+            "avg_paid": avg_paid,
+        },
+        "categories": cat_rows,
+        "keyword_summary": kw_summary,
+        "keywords": sorted(all_kws, key=lambda k: k["crawls"], reverse=True),
+        "detail_category": detail_cat_name,
+    }
+    html = report.build_incrementality_report(scope, ins, themed, src)
+    return {"mode": "incrementality", "scope": scope, "html": html, "source": src}
+
+
 if generate:
     st.session_state.pop("pdf_bytes", None)
     start, end = _dates()
     if start is None:
         st.warning("Please pick a start and end date.")
     else:
-        if is_category_mode:
+        if is_incr_mode:
+            rep_ = _build_incrementality_report(start, end)
+        elif is_category_mode:
             rep_ = _build_category_report(start, end)
         else:
             rep_ = _build_deepdive(start, end)
@@ -682,6 +828,9 @@ if rep.get("mode") == "history":
             f"{rep['scope'].get('category_value','')} · generated {rep.get('ts','')}")
 elif rep.get("mode") == "category":
     st.info(f"📊 **Category Report** — {rep['scope'].get('category_value','')} · "
+            f"{rep['scope'].get('date_min','')} → {rep['scope'].get('date_max','')}")
+elif rep.get("mode") == "incrementality":
+    st.info(f"📈 **Incrementality Report** — {rep['scope'].get('brand_label','')} · "
             f"{rep['scope'].get('date_min','')} → {rep['scope'].get('date_max','')}")
 
 components.html(rep["html"], height=5200, scrolling=True)

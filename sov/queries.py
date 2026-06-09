@@ -574,6 +574,88 @@ LIMIT 5
 """.strip()
 
 
+# ── SOV-based incrementality (organic vs paid from shelf data only) ───────
+def sov_incr_overview_query(level: str = "digital_shelf_l1") -> str:
+    """Per-category organic vs paid SOV for a focus brand — computed from the
+    SOV performance cube only (no ad-spend tables).
+    Organic and Paid are BOTH measured as points of total_all (same denominator)
+    so organic_sov + paid_sov ≈ combined_sov."""
+    lvl = _check_level(level)
+    return f"""
+WITH f AS (
+  SELECT m.category, p.search_term, p.feed_date, p.brand, p.no_of_crawls,
+         p.organic_page_1_count AS org, p.sp_page_1_count AS sp,
+         p.sb_page_1_count AS sb, p.all_page_1_count AS comb,
+         p.total_all_page_1_count AS tot
+  FROM {_P()} p
+  JOIN (SELECT DISTINCT client_id, search_term, {lvl} AS category
+        FROM {_M()} WHERE {lvl} IS NOT NULL) m
+    ON p.client_id = m.client_id AND p.search_term = m.search_term
+  WHERE p.client_id = :cid AND p.feed_date BETWEEN :s AND :e
+),
+kd AS (
+  SELECT category, search_term, feed_date,
+         MAX(tot) AS t, MAX(no_of_crawls) AS cr,
+         SUM(CASE WHEN lower(trim(brand)) = lower(trim(:fbrand))
+                  THEN org ELSE 0 END) AS f_org,
+         SUM(CASE WHEN lower(trim(brand)) = lower(trim(:fbrand))
+                  THEN sp + sb ELSE 0 END) AS f_paid,
+         SUM(CASE WHEN lower(trim(brand)) = lower(trim(:fbrand))
+                  THEN comb ELSE 0 END) AS f_comb
+  FROM f GROUP BY category, search_term, feed_date
+)
+SELECT category,
+       100.0 * SUM(f_org)  / NULLIF(SUM(t), 0) AS organic_sov,
+       100.0 * SUM(f_paid) / NULLIF(SUM(t), 0) AS paid_sov,
+       100.0 * SUM(f_comb) / NULLIF(SUM(t), 0) AS combined_sov,
+       SUM(cr) AS crawls,
+       COUNT(DISTINCT search_term) AS keywords
+FROM kd GROUP BY category
+HAVING SUM(f_comb) > 0
+ORDER BY crawls DESC
+LIMIT 30
+""".strip()
+
+
+def sov_incr_keywords_query(level: str) -> str:
+    """Per-keyword organic vs paid SOV for a focus brand in one category.
+    Both channels as points of total_all (same denominator)."""
+    return f"""
+WITH f AS (
+  SELECT p.search_term, p.feed_date, p.brand, p.no_of_crawls,
+         p.organic_page_1_count AS org, p.sp_page_1_count AS sp,
+         p.sb_page_1_count AS sb, p.all_page_1_count AS comb,
+         p.total_all_page_1_count AS tot
+  FROM {_P()} p
+  JOIN (SELECT client_id, search_term FROM {_M()}
+        WHERE {_check_level(level)} = :catval
+        GROUP BY client_id, search_term) m
+    ON p.client_id = m.client_id AND p.search_term = m.search_term
+  WHERE p.client_id = :cid AND p.feed_date BETWEEN :s AND :e
+),
+kd AS (
+  SELECT search_term, feed_date,
+         MAX(tot) AS t, MAX(no_of_crawls) AS cr,
+         SUM(CASE WHEN lower(trim(brand)) = lower(trim(:fbrand))
+                  THEN org ELSE 0 END) AS f_org,
+         SUM(CASE WHEN lower(trim(brand)) = lower(trim(:fbrand))
+                  THEN sp + sb ELSE 0 END) AS f_paid,
+         SUM(CASE WHEN lower(trim(brand)) = lower(trim(:fbrand))
+                  THEN comb ELSE 0 END) AS f_comb
+  FROM f GROUP BY search_term, feed_date
+)
+SELECT search_term,
+       100.0 * SUM(f_org)  / NULLIF(SUM(t), 0) AS organic_sov,
+       100.0 * SUM(f_paid) / NULLIF(SUM(t), 0) AS paid_sov,
+       100.0 * SUM(f_comb) / NULLIF(SUM(t), 0) AS combined_sov,
+       SUM(cr) AS crawls
+FROM kd GROUP BY search_term
+HAVING SUM(t) > 0
+ORDER BY crawls DESC
+LIMIT 200
+""".strip()
+
+
 def region_share_query(level: str | None) -> str:
     return f"""
 WITH s AS (
