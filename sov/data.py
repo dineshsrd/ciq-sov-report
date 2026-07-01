@@ -745,6 +745,58 @@ def _sample_sov_incr_overview(client_id, level, start, end, focus_brand):
     return pd.DataFrame(rows).sort_values("crawls", ascending=False).reset_index(drop=True)
 
 
+def get_sov_incr_keywords_ranked(client_id: int, level: str,
+                                  category_value: str, start: dt.date,
+                                  end: dt.date,
+                                  focus_brand: str) -> pd.DataFrame:
+    """Per-keyword organic vs paid SOV WITH rank for the brand in one category.
+    Returns: search_term, organic_sov, paid_sov, combined_sov, crawls, rank,
+             paid_fraction, classification, category, keyword_type."""
+    if SETTINGS.is_live:
+        from . import queries
+        df = _run(queries.sov_incr_keywords_ranked_query(level),
+                  {"cid": int(client_id), "catval": category_value,
+                   "s": str(start), "e": str(end), "fbrand": focus_brand})
+        for c in ("organic_sov", "paid_sov", "combined_sov", "crawls"):
+            if c in df.columns:
+                df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0.0)
+        if "rank" in df.columns:
+            df["rank"] = pd.to_numeric(df["rank"], errors="coerce").fillna(999).astype(int)
+        # keyword_type comes from metadata (branded/generic)
+        if "keyword_type" not in df.columns:
+            df["keyword_type"] = ""
+        else:
+            df["keyword_type"] = df["keyword_type"].fillna("").astype(str)
+    else:
+        df = _sample_sov_incr_keywords(client_id, level, category_value,
+                                       start, end, focus_brand)
+        # Sample mode: compute rank from combined_sov descending
+        if not df.empty:
+            df = df.sort_values("combined_sov", ascending=False).reset_index(drop=True)
+            df["rank"] = df.index + 1
+        else:
+            df["rank"] = pd.Series(dtype=int)
+        # Sample mode: try to get keyword_type from metadata
+        try:
+            meta = sample_data.metadata()
+            kt_map = (meta.groupby("search_term")["keyword_type"]
+                      .first().to_dict())
+            df["keyword_type"] = df["search_term"].map(kt_map).fillna("").astype(str)
+        except Exception:
+            df["keyword_type"] = ""
+
+    if not df.empty:
+        df["paid_fraction"] = df.apply(
+            lambda r: (r["paid_sov"] / r["combined_sov"] * 100)
+            if r["combined_sov"] > 0 else 0.0, axis=1)
+        df["classification"] = df.apply(
+            lambda r: transforms.classify_incr(
+                float(r["organic_sov"]), float(r["paid_sov"]),
+                float(r["combined_sov"])), axis=1)
+        df["category"] = category_value
+    return df
+
+
 def _sample_sov_incr_keywords(client_id, level, category_value, start, end, focus_brand):
     raw = _sample_raw(client_id, level, category_value, start, end)
     if raw.empty:

@@ -117,6 +117,13 @@ def _sov_incr_kws(cid, level, catval, start, end, fbrand):
     return data.get_sov_incr_keywords(cid, level, catval, start, end, fbrand)
 
 
+@st.cache_data(show_spinner=False)
+def _client_brands(cid):
+    """All brand names belonging to this client_id (e.g. Pepsico → Pepsi,
+    Gatorade, Mountain Dew, Doritos…).  Used to filter branded keywords."""
+    return data.get_client_brands(cid)
+
+
 def _num(df: pd.DataFrame) -> pd.DataFrame:
     """Prepend a 1..N number column for display."""
     d = df.copy()
@@ -717,8 +724,16 @@ def _build_category_report(start, end):
     return {"mode": "category", "scope": scope, "html": html, "source": src}
 
 
+@st.cache_data(show_spinner="Pulling ranked keyword data…")
+def _sov_incr_kws_ranked(cid, level, catval, start, end, fbrand):
+    return data.get_sov_incr_keywords_ranked(cid, level, catval, start, end, fbrand)
+
+
 def _build_incrementality_report(start, end):
-    """Incrementality report — where the brand earns vs buys shelf space."""
+    """Incrementality report — where the brand earns vs buys shelf space.
+    8-section structure: Executive Summary, Central Thesis, Organic SOV Dashboard,
+    Cannibalization Audit, Moderate-Risk Cluster, Growth Opportunities,
+    Budget Reallocation Framework, Next Steps."""
     # Pass L1 filter as tuple (hashable for st.cache_data)
     l1_sel = tuple(incr_l1_selected) if incr_l1_selected else None
     all_levels_df = _sov_incr_all_levels(cid, start, end, focus_brand,
@@ -756,34 +771,70 @@ def _build_incrementality_report(start, end):
     # Also build L1-only subset for hero stats and keyword drill-down
     l1_rows = [c for c in cat_rows if c["level"] == "L1"]
 
-    # Top 3 L1 categories by crawl volume → pull keyword detail
-    top_cats = sorted(l1_rows, key=lambda c: c["crawls"], reverse=True)[:3]
+    # Pull keyword detail for ALL selected L1 categories (with rank)
     all_kws: list[dict] = []
-    detail_cat_name = ""
-    for tc in top_cats:
+    seen_terms: set = set()
+    for tc in sorted(l1_rows, key=lambda c: c["crawls"], reverse=True):
         try:
-            kdf = _sov_incr_kws(cid, "digital_shelf_l1", tc["category"],
-                                start, end, focus_brand)
+            kdf = _sov_incr_kws_ranked(cid, "digital_shelf_l1", tc["category"],
+                                        start, end, focus_brand)
             if kdf.empty:
                 continue
-            if not detail_cat_name:
-                detail_cat_name = tc["category"]
             for _, kr in kdf.iterrows():
-                cls = transforms.classify_incr(
-                    float(kr.get("organic_sov", 0)),
-                    float(kr.get("paid_sov", 0)),
-                    float(kr.get("combined_sov", 0)))
+                term = str(kr["search_term"])
+                # De-duplicate: a keyword may appear in multiple L1 categories
+                if term in seen_terms:
+                    continue
+                seen_terms.add(term)
                 all_kws.append({
-                    "search_term": str(kr["search_term"]),
+                    "search_term": term,
                     "organic_sov": float(kr.get("organic_sov", 0)),
                     "paid_sov": float(kr.get("paid_sov", 0)),
                     "combined_sov": float(kr.get("combined_sov", 0)),
-                    "crawls": float(kr.get("crawls", 0)),
-                    "classification": cls,
+                    "paid_fraction": float(kr.get("paid_fraction", 0)),
+                    "rank": int(kr.get("rank", 999)),
+                    "classification": str(kr.get("classification", "Balanced")),
                     "category": tc["category"],
+                    "keyword_type": str(kr.get("keyword_type", "")),
                 })
         except Exception:
             continue
+
+    # ── Filter out branded keywords ─────────────────────────────────────
+    # Branded keywords inflate ranks and aren't useful for incrementality
+    # analysis. A company like Pepsico owns many sub-brands (Pepsi, Gatorade,
+    # Mountain Dew, Doritos…) — we need to filter ALL of them, not just the
+    # parent company name. Three layers:
+    #   1. keyword_type from metadata (most reliable signal)
+    #   2. Any client brand name as substring in the search term
+    #   3. Focus brand name as substring (fallback)
+    _all_client_brands = _client_brands(cid)
+    _brand_terms: set[str] = set()
+    # Add the focus brand itself
+    _fb_lower = focus_brand.lower().strip()
+    if _fb_lower and len(_fb_lower) > 2:
+        _brand_terms.add(_fb_lower)
+    # Add every sub-brand from this client's portfolio
+    for bn in _all_client_brands:
+        bn_lower = bn.lower().strip()
+        if not bn_lower or len(bn_lower) <= 2:
+            continue
+        # Skip junk entries
+        if bn_lower in ("unknown", "null_value", "generic", "other", "n/a",
+                         "none", "unbranded"):
+            continue
+        _brand_terms.add(bn_lower)
+
+    def _is_branded(term: str, kw_type: str) -> bool:
+        if kw_type.strip().lower() == "branded":
+            return True
+        tl = term.lower()
+        return any(bt in tl for bt in _brand_terms)
+
+    _pre_filter = len(all_kws)
+    all_kws = [kw for kw in all_kws
+               if not _is_branded(kw["search_term"],
+                                  kw.get("keyword_type", ""))]
 
     # Keyword summary counts
     kw_summary = {"total": len(all_kws), "cannibalizing": 0,
@@ -823,13 +874,13 @@ def _build_incrementality_report(start, end):
             "categories": len(l1_rows),
             "avg_organic": avg_org,
             "avg_paid": avg_paid,
-            "total_rows": len(cat_rows),
+            "total_keywords": len(all_kws),
+            "cannibalizing": kw_summary.get("cannibalizing", 0),
+            "growth_terms": kw_summary.get("paid_dependent", 0) + kw_summary.get("dark_spot", 0),
+            "balanced": kw_summary.get("balanced", 0),
         },
-        "categories": sorted(cat_rows, key=lambda c: (c["level"],
-                                                        c.get("path", c["category"]).lower())),
         "keyword_summary": kw_summary,
-        "keywords": sorted(all_kws, key=lambda k: k["crawls"], reverse=True),
-        "detail_category": detail_cat_name,
+        "keywords": sorted(all_kws, key=lambda k: k.get("organic_sov", 0), reverse=True),
     }
     html = report.build_incrementality_report(scope, ins, themed, src)
     return {"mode": "incrementality", "scope": scope, "html": html, "source": src}

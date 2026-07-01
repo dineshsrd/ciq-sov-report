@@ -218,8 +218,8 @@ def _template_category(ctx: dict) -> dict:
 
 
 # ── Incrementality report insights ──────────────────────────────────────────
-INCR_SECTION_KEYS = ["verdict", "overview", "cannibalizing", "incremental",
-                      "opportunities", "how_you_win"]
+INCR_SECTION_KEYS = ["verdict", "thesis", "sov_dashboard", "cannibalization",
+                      "moderate_risk", "growth", "reallocation", "next_steps"]
 
 
 def generate_incrementality_insights(context: dict) -> tuple[dict, str]:
@@ -247,19 +247,29 @@ def _openai_incrementality(context: dict) -> dict:
         "Use ONLY the data in the JSON. Never invent figures. "
         "Tone: strategic, action-oriented, CommerceIQ brand voice. "
         "Return JSON with keys: " + ", ".join(INCR_SECTION_KEYS) + ". "
-        "'verdict' = 2-3 sentence headline on the brand's organic vs paid balance; "
-        "'overview' = read on the category landscape; "
-        "'cannibalizing' = keywords with strong organic AND paid — wasted overlap; "
-        "'incremental' = keywords where ads are the lifeline; "
-        "'opportunities' = high-demand keywords with no brand presence; "
-        "'how_you_win' = 2-4 sentence playbook plus a nudge to CommerceIQ. "
+        "'verdict' = 2-3 sentence headline on the brand's organic vs paid balance "
+        "and the key finding (how many cannibalization terms vs growth terms); "
+        "'thesis' = the central thesis — 3 problem statements: cannibalization "
+        "(paying for what they already own), under-investment in growth, and "
+        "organic strongholds to protect; "
+        "'sov_dashboard' = read on the organic SOV keyword dashboard — what the "
+        "top organic keywords reveal about the brand's natural shelf position; "
+        "'cannibalization' = insight on the cannibalization audit — keywords with "
+        "strong organic rank where paid spend is redundant; "
+        "'moderate_risk' = read on moderate-risk (Balanced) keywords where organic "
+        "and paid are both present but neither dominates; "
+        "'growth' = insight on growth opportunities — paid-dependent terms where "
+        "ads are the lifeline plus dark spots with zero presence; "
+        "'reallocation' = budget reallocation framework — priorities for "
+        "immediate action, phased optimization, and sustained growth; "
+        "'next_steps' = 2-3 sentence action plan with timeline nudge. "
         "Each value 1-3 sentences, under 60 words. Cite only exact numbers."
     )
     resp = client.chat.completions.create(
         model=SETTINGS.openai_model,
         messages=[{"role": "system", "content": system},
                   {"role": "user", "content": json.dumps(context, default=str)}],
-        temperature=0.4, max_tokens=800,
+        temperature=0.4, max_tokens=1000,
         response_format={"type": "json_object"},
     )
     data = json.loads(resp.choices[0].message.content)
@@ -275,51 +285,72 @@ def _template_incrementality(ctx: dict) -> dict:
     n_inc = ks.get("paid_dependent", 0)
     n_org = ks.get("organic_led", 0)
     n_dark = ks.get("dark_spot", 0)
+    n_bal = ks.get("balanced", 0)
     n_total = ks.get("total", 0)
-
-    organic_led = [c for c in cats if c.get("classification") == "Organic-led"]
-    paid_dep = [c for c in cats if c.get("classification") == "Paid-dependent"]
+    n_growth = n_inc + n_dark
 
     verdict = (
-        f"{brand} appears across {n_cats} Amazon categories. "
-        + (f"{len(organic_led)} are organic-led (strong free visibility), "
-           f"{len(paid_dep)} are paid-dependent (ads are the lifeline). "
-           if organic_led or paid_dep else "")
-        + f"Across {n_total} tracked keywords, {n_can} show potential "
-          f"cannibalization where organic and paid overlap."
+        f"{brand} appears across {n_cats} Amazon categories with {n_total} "
+        f"tracked keywords. {n_can} terms show sponsored cannibalization where "
+        f"the brand already owns organic shelf space. {n_growth} terms represent "
+        f"growth opportunities — either paid-dependent or completely untapped."
     )
-    overview = (
-        f"Categories flagged 'Paid-dependent' would lose visibility if ads stopped; "
-        "'Organic-led' categories earn share without spend — the most efficient "
-        "presence. Understanding this balance is key to efficient budget allocation."
+    thesis = (
+        f"{n_can} keywords where {brand} has strong organic rank AND active ads — "
+        f"these are candidates to reduce paid spend and redeploy budget. "
+        f"{n_growth} keywords where the brand is either invisible or entirely "
+        f"reliant on ads. {n_org} organic strongholds earning free traffic to protect."
     )
-    cannibalizing = (
-        f"{n_can} keywords have strong organic positioning AND active ad placements "
-        "— reducing paid focus here won't hurt visibility but frees resources for "
-        "higher-impact terms." if n_can else
-        "No significant cannibalization detected — paid placements are well-targeted."
+    sov_dashboard = (
+        f"The organic SOV dashboard shows where {brand} earns visibility "
+        f"without paid support. Keywords with high organic SOV and active paid "
+        f"spend are cannibalization candidates; those with low organic SOV are "
+        f"where ads provide genuine incremental value."
     )
-    incremental = (
-        f"{n_inc} keywords depend entirely on paid placements for visibility. "
-        f"These are {brand}'s highest-risk terms — cutting ads here means "
-        "disappearing from the shelf." if n_inc else
-        f"{brand} has organic coverage on most paid terms — ad dependency is low."
+    cannibalization = (
+        f"{n_can} keywords have organic SOV above 2.5% AND paid SOV above 1.5% "
+        f"— {brand} is paying for shelf positions it already owns. Reducing paid "
+        f"focus on these terms frees resources for higher-impact growth keywords."
+        if n_can else
+        "No significant cannibalization detected — paid placements are "
+        "well-targeted to terms where organic coverage is insufficient."
     )
-    opportunities = (
-        f"{n_dark} high-demand keywords have no {brand} presence (organic or paid). "
-        "These are the highest-upside targets for new campaigns or content "
-        "optimization." if n_dark else
-        f"{brand} has broad keyword coverage — focus on deepening share."
+    moderate_risk = (
+        f"{n_bal} keywords have both organic and paid presence in a balanced ratio. "
+        f"These terms warrant systematic bid management — testing paid-down "
+        f"scenarios to find the optimal organic-paid mix over 30-60 days."
+        if n_bal else
+        "No moderate-risk terms identified — the keyword portfolio is "
+        "cleanly split between organic-led and paid-dependent."
     )
-    how_you_win = (
-        "Shift focus from cannibalizing keywords to dark-spot opportunities. "
-        f"Protect the {n_org} organic strongholds with content rather than spend. "
-        "CommerceIQ can automate this reallocation across your entire portfolio "
-        "— let's talk."
+    growth = (
+        f"{n_inc} keywords depend entirely on paid placements (paid fraction "
+        f"above 65%) — cutting ads means disappearing. "
+        f"{n_dark} keywords have zero presence — pure upside opportunity. "
+        f"Accelerate investment across these {n_growth} growth terms."
+        if n_growth else
+        f"{brand} has broad keyword coverage — focus on deepening share "
+        "rather than expansion."
     )
-    return {"verdict": verdict, "overview": overview,
-            "cannibalizing": cannibalizing, "incremental": incremental,
-            "opportunities": opportunities, "how_you_win": how_you_win}
+    reallocation = (
+        f"Priority 1 (Immediate): {n_can} cannibalization terms — reduce or "
+        f"pause spend and redeploy to growth keywords. "
+        f"Priority 2 (30-60 days): {n_bal} moderate-risk terms — systematic "
+        f"bid management to find the optimal mix. "
+        f"Priority 3 (Sustained): {n_growth} growth terms — accelerate "
+        f"investment in paid-dependent and dark-spot keywords."
+    )
+    next_steps = (
+        f"Week 1: Audit and reduce spend on {n_can} cannibalizing keywords. "
+        f"Week 2-3: Reallocate freed budget to {n_growth} growth opportunities. "
+        f"Ongoing: Monitor {n_bal} balanced terms for optimization. "
+        f"CommerceIQ can automate this reallocation across your entire "
+        f"portfolio — let's talk."
+    )
+    return {"verdict": verdict, "thesis": thesis,
+            "sov_dashboard": sov_dashboard, "cannibalization": cannibalization,
+            "moderate_risk": moderate_risk, "growth": growth,
+            "reallocation": reallocation, "next_steps": next_steps}
 
 
 def generate_narrative(context: dict) -> tuple[str, str]:

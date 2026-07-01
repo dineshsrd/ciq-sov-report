@@ -756,6 +756,67 @@ LIMIT 200
 """.strip()
 
 
+def sov_incr_keywords_ranked_query(level: str) -> str:
+    """Per-keyword organic vs paid SOV for a focus brand in one category,
+    WITH the brand's rank among all brands on each keyword (by all_page_1_count).
+    Returns: search_term, organic_sov, paid_sov, combined_sov, crawls, rank,
+             keyword_type (branded/generic from metadata)."""
+    return f"""
+WITH f AS (
+  SELECT p.search_term, p.feed_date, p.brand, p.no_of_crawls, m.keyword_type,
+         p.organic_page_1_count AS org, p.sp_page_1_count AS sp,
+         p.sb_page_1_count AS sb, p.all_page_1_count AS comb,
+         p.total_all_page_1_count AS tot
+  FROM {_P()} p
+  JOIN (SELECT client_id, search_term, MAX(keyword_type) AS keyword_type FROM {_M()}
+        WHERE {_check_level(level)} = :catval
+        GROUP BY client_id, search_term) m
+    ON p.client_id = m.client_id AND p.search_term = m.search_term
+  WHERE p.client_id = :cid AND p.feed_date BETWEEN :s AND :e
+),
+kd AS (
+  SELECT search_term, feed_date,
+         MAX(keyword_type) AS keyword_type, MAX(tot) AS t, MAX(no_of_crawls) AS cr,
+         SUM(CASE WHEN lower(trim(brand)) = lower(trim(:fbrand))
+                  THEN org ELSE 0 END) AS f_org,
+         SUM(CASE WHEN lower(trim(brand)) = lower(trim(:fbrand))
+                  THEN sp + sb ELSE 0 END) AS f_paid,
+         SUM(CASE WHEN lower(trim(brand)) = lower(trim(:fbrand))
+                  THEN comb ELSE 0 END) AS f_comb
+  FROM f GROUP BY search_term, feed_date
+),
+focus_sov AS (
+  SELECT search_term, MAX(keyword_type) AS keyword_type,
+         100.0 * SUM(f_org)  / NULLIF(SUM(t), 0) AS organic_sov,
+         100.0 * SUM(f_paid) / NULLIF(SUM(t), 0) AS paid_sov,
+         100.0 * SUM(f_comb) / NULLIF(SUM(t), 0) AS combined_sov,
+         SUM(cr) AS crawls
+  FROM kd GROUP BY search_term
+  HAVING SUM(t) > 0
+),
+brand_kw AS (
+  SELECT search_term, brand, SUM(comb) AS brand_comb
+  FROM f GROUP BY search_term, brand
+),
+ranked AS (
+  SELECT search_term, brand, brand_comb,
+         ROW_NUMBER() OVER (PARTITION BY search_term ORDER BY brand_comb DESC) AS rk
+  FROM brand_kw
+),
+focus_rank AS (
+  SELECT search_term, rk AS rank
+  FROM ranked
+  WHERE lower(trim(brand)) = lower(trim(:fbrand))
+)
+SELECT fs.search_term, fs.organic_sov, fs.paid_sov, fs.combined_sov,
+       fs.crawls, COALESCE(fr.rank, 999) AS rank, fs.keyword_type
+FROM focus_sov fs
+LEFT JOIN focus_rank fr ON fs.search_term = fr.search_term
+ORDER BY fs.crawls DESC
+LIMIT 200
+""".strip()
+
+
 def region_share_query(level: str | None) -> str:
     return f"""
 WITH s AS (
