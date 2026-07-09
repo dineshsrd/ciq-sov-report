@@ -11,7 +11,7 @@ from config import SETTINGS
 
 
 SECTION_KEYS = ["verdict", "leaderboard", "organic_paid", "subcategories",
-                "keywords", "incrementality", "readiness", "how_you_win"]
+                "keywords", "zero_sov", "incrementality", "readiness", "how_you_win"]
 
 
 def generate_sectioned_insights(context: dict) -> tuple[dict, str]:
@@ -44,7 +44,10 @@ def _openai_sectioned(context: dict) -> dict:
         "faster opening; 'subcategories' = which sub-categories the brand can "
         "win vs where rivals dominate (note no single brand owns every "
         "sub-category); 'keywords' = the biggest keyword opportunities / "
-        "whitespace; 'incrementality' = how much presence is earned (organic) vs "
+        "whitespace; 'zero_sov' = the highest-volume searches where the brand has "
+        "ZERO presence at all (organic AND paid) — the biggest missed opportunities, "
+        "ranked by search volume, not the same list as 'keywords'; "
+        "'incrementality' = how much presence is earned (organic) vs "
         "bought (paid); 'readiness' = catalog/content coverage gaps; "
         "'how_you_win' = a 2-4 sentence playbook to close the gap and a nudge to "
         "talk to CommerceIQ (do NOT name specific CommerceIQ products). "
@@ -101,6 +104,13 @@ def _template_sectioned(ctx: dict) -> dict:
     keywords = ("Whitespace (high volume, low share): "
                 + "; ".join(m["search_term"] for m in weak) if weak
                 else "See the keyword opportunities below.")
+    zero_sov_kws = ctx.get("zero_sov_keywords", [])[:3]
+    zero_sov = ("Zero-SOV, highest volume: "
+               + "; ".join(f"{m['search_term']} ({m['crawls']:.0f} searches)"
+                          for m in zero_sov_kws)
+               if zero_sov_kws else
+               "No zero-share keywords found — you have at least some presence "
+               "everywhere you're tracked.")
     incrementality = (
         f"{ae['paid_sov_pct']:.0f}% paid Share of Voice at ROAS {ae['roas']:.1f}x; "
         f"{ae['incremental_pct']:.0f}% of ad-driven sales are incremental "
@@ -114,7 +124,8 @@ def _template_sectioned(ctx: dict) -> dict:
                    "CommerceIQ can turn this into an automated plan — let's talk.")
     return {"verdict": verdict, "leaderboard": leaderboard,
             "organic_paid": organic_paid, "subcategories": subcategories,
-            "keywords": keywords, "incrementality": incrementality,
+            "keywords": keywords, "zero_sov": zero_sov,
+            "incrementality": incrementality,
             "readiness": readiness, "how_you_win": how_you_win}
 
 

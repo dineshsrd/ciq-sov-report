@@ -113,6 +113,28 @@ def top_keywords(df: pd.DataFrame, n: int = 10, mtype: str = "all",
     return kw.sort_values(sort_col, ascending=False).head(n).reset_index(drop=True)[cols]
 
 
+# ── Zero-SOV keywords, ranked by raw search volume ────────────────────────
+def zero_sov_keywords(df: pd.DataFrame, n: int = 10, mtype: str = "all",
+                      cutoff: str = "page_1",
+                      focus_brand: str | None = None) -> pd.DataFrame:
+    """Keywords where the focus brand has ZERO share, ranked by crawl volume
+    (search demand) rather than a blended opportunity score. These are the
+    biggest missed opportunities: real search volume the brand doesn't win
+    on at all."""
+    cols = ["search_term", "crawls", "intensity"]
+    if df.empty:
+        return pd.DataFrame(columns=cols)
+    num = numerator_col(mtype, cutoff)
+    crawls = _per_keyword(df, "no_of_crawls", "max")
+    intensity = _per_keyword(df, denominator_col(mtype, cutoff), "max")
+    client_cnt = df[_focus_mask(df, focus_brand)].groupby("search_term")[num].sum()
+    kw = pd.DataFrame({"crawls": crawls, "intensity": intensity,
+                       "client_count": client_cnt}).fillna(0.0)
+    kw = kw[kw["client_count"] == 0]
+    kw = kw.reset_index()
+    return kw.sort_values("crawls", ascending=False).head(n).reset_index(drop=True)[cols]
+
+
 # ── Keyword positioning (where the brand ranks per keyword) ──────────────
 def keyword_positioning(df: pd.DataFrame, n: int = 15, mtype: str = "all",
                         cutoff: str = "page_1",

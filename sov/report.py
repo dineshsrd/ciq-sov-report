@@ -528,17 +528,20 @@ def _subcards(cards: list[dict], cat: str) -> str:
     return "".join(out)
 
 
-def _kwlines(lines: list[dict], by: str, val_key: str, suffix: str) -> str:
+def _kwlines(lines: list[dict], by: str, val_key: str, suffix: str,
+            fmt: str = "pct") -> str:
     if not lines:
         return ""
     mx = max((abs(l.get(by, 0)) for l in lines), default=0) or 1.0
     rows = ['<div class="subcard wide"><div class="sc-body">']
     for l in lines:
         w = min(100, abs(l.get(by, 0)) / mx * 100)
+        val = l.get(val_key, 0)
+        val_txt = f"{val:,.0f}" if fmt == "count" else f"{val:.1f}%"
         rows.append(
             f'<div class="kwline"><span class="kw">{_html.escape(str(l["kw"]))}</span>'
             f'<span class="rk"><span class="demand"><i style="width:{w:.0f}%"></i></span>'
-            f'<span class="rnum"><b>{l.get(val_key, 0):.1f}%</b> {suffix}</span></span></div>')
+            f'<span class="rnum"><b>{val_txt}</b> {suffix}</span></span></div>')
     rows.append("</div></div>")
     return "".join(rows)
 
@@ -683,6 +686,13 @@ def build_themed_report(scope: dict, ins: dict, d: dict,
         secs.append(_section(f"{n:02d}", "Keyword Opportunities — Whitespace",
                              ins.get("keywords", ""),
                              _kwlines(d["whitespace"], "crawls", "your_sov", "your SOV")))
+        n += 1
+    if d.get("zero_sov"):
+        secs.append(_section(
+            f"{n:02d}", "Top Missed Opportunities — Zero SOV",
+            ins.get("zero_sov", "Highest-volume searches where you currently have "
+                                 "no organic or paid presence at all."),
+            _kwlines(d["zero_sov"], "crawls", "crawls", "searches", fmt="count")))
         n += 1
     if d.get("sku_opt") and d["sku_opt"].get("items"):
         so = d["sku_opt"]

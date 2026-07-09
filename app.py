@@ -535,6 +535,7 @@ def _build_deepdive(start, end):
     cl = transforms.combined_leaderboard(brandagg, cutoff, focus_brand, top=15)
     kp = transforms.keyword_positioning(kb, top_n, mtype, cutoff, focus_brand)
     ws = transforms.top_keywords(kb, top_n, mtype, cutoff, "opportunity", focus_brand)
+    zsv = transforms.zero_sov_keywords(kb, top_n, mtype, cutoff, focus_brand)
     cov = transforms.coverage(kb, mtype, cutoff, focus_brand)
 
     frow = cl[cl["is_client"]]
@@ -575,6 +576,7 @@ def _build_deepdive(start, end):
         "subcategory_leaders": (leaders.head(8).to_dict("records")
                                 if leaders is not None else []),
         "top_keywords": ws.to_dict("records"),
+        "zero_sov_keywords": zsv.to_dict("records"),
         "coverage": cov,
     }
     if incr:
@@ -615,6 +617,8 @@ def _build_deepdive(start, end):
                     if leaders is not None else []),
         "whitespace": [{"kw": r["search_term"], "your_sov": float(r["client_sov"]),
                         "crawls": float(r["crawls"])} for _, r in ws.head(10).iterrows()],
+        "zero_sov": [{"kw": r["search_term"], "crawls": float(r["crawls"])}
+                     for _, r in zsv.head(10).iterrows()],
     }
     if sku_opt_block:
         themed["sku_opt"] = sku_opt_block
