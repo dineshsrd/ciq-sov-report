@@ -473,8 +473,8 @@ def _opt_skus(cid, level, catval, fbrand):
 
 
 def _build_sku_opt(cid, level, category_value, focus_brand, kb):
-    """Find the focus brand's underperforming SKUs and generate, for each, an
-    optimized title targeting the category's highest-demand keywords.
+    """Find the focus brand's top underperforming SKU and generate a deep PDP
+    optimization (title, bullets, description, credibility analysis).
     Returns a block for the report, or None if there's nothing to optimize."""
     try:
         opt_df = _opt_skus(cid, level, category_value, focus_brand)
@@ -487,39 +487,32 @@ def _build_sku_opt(cid, level, category_value, focus_brand, kb):
                 f"or no SKU listings were captured for this brand/range).")
         return None
 
-    # Highest-demand (trending) keywords in this category, by crawl volume.
-    trending: list[str] = []
-    if kb is not None and not kb.empty and "no_of_crawls" in kb.columns:
-        tv = (kb.groupby("search_term")["no_of_crawls"].max()
-              .sort_values(ascending=False).head(15))
-        trending = [str(k) for k in tv.index]
+    r = opt_df.iloc[0]
+    sku_data = {
+        "sku": str(r["sku"]),
+        "title": str(r.get("title", "") or ""),
+        "image_url": str(r.get("image_url", "") or ""),
+        "product_page_url": str(r.get("product_page_url", "") or ""),
+        "avg_rank": round(float(r.get("avg_rank", 0) or 0)),
+        "best_rank": int(r.get("best_rank", 0) or 0),
+        "keywords": int(r.get("keywords", 0) or 0),
+        "page1_kws": int(r.get("page1_kws", 0) or 0),
+        "current_keywords": r.get("kw_ranked", []) or [],
+    }
 
-    sku_list = []
-    for _, r in opt_df.head(6).iterrows():
-        sku_list.append({
-            "sku": str(r["sku"]),
-            "title": str(r.get("title", "") or ""),
-            "image_url": str(r.get("image_url", "") or ""),
-            "product_page_url": str(r.get("product_page_url", "") or ""),
-            "avg_rank": float(r.get("avg_rank", 0) or 0),
-            "best_rank": int(r.get("best_rank", 0) or 0),
-            "keywords": int(r.get("keywords", 0) or 0),
-            "page1_kws": int(r.get("page1_kws", 0) or 0),
-            "current_keywords": r.get("kw_ranked", []) or [],
-        })
-
-    with st.spinner("Generating SKU optimization recommendations with AI…"):
-        items, _src = sku_optimizer.optimize_skus_for_report(
-            sku_list, trending, focus_brand, category_value)
-    if not items:
+    with st.spinner("Deep-optimizing SKU listing with AI…"):
+        card, _src = sku_optimizer.optimize_sku_for_report(
+            sku_data, focus_brand, category_value)
+    if not card:
         return None
 
     return {
-        "intro": (f"These {len(items)} {focus_brand} products already appear for "
-                  f"high-demand {category_value} keywords but rank below the top "
-                  f"positions — the biggest available ranking upside. Each "
-                  f"optimized title below is built to win the target keywords shown."),
-        "items": items,
+        "intro": (f"This {focus_brand} product appears for "
+                  f"high-demand {category_value} keywords but ranks below the top "
+                  f"positions — the biggest available ranking upside. Below is a "
+                  f"complete PDP optimization: title, bullet points, and "
+                  f"description, with a full credibility and intent analysis."),
+        "card": card,
     }
 
 

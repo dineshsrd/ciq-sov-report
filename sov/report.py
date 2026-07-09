@@ -95,8 +95,8 @@ _CTA = f"""<div class="cta">
 
 _STYLE = f"""
   * {{ box-sizing: border-box; }}
-  body {{ font-family: Inter, 'Helvetica Neue', Arial, sans-serif;
-         color: {B.BLACK}; margin: 0; background: {B.WHITE}; }}
+  body {{ font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+         color: #0A0A0A; margin: 0; background: {B.WHITE}; }}
   .wrap {{ max-width: 1040px; margin: 0 auto; padding: 0 28px 56px; }}
   header {{ background: {B.DEEP_PURPLE}; color: {B.WHITE}; padding: 28px;
             border-bottom: 5px solid {B.ELECTRIC}; }}
@@ -146,6 +146,8 @@ def _page(scope: dict, title: str, cards: list, body_html: str,
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{_html.escape(title)} — {_html.escape(str(scope.get('category_value', '')))}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 {plotly_head}
 <style>{_STYLE}</style></head>
 <body>
@@ -212,10 +214,14 @@ _PAL = [B.ELECTRIC, B.COBALT, B.SKY, "#7a3df0", "#e0457b", "#e08a00",
 
 _THEME_CSS = """
 :root{--purple:#210235;--electric:#C231FF;--sky:#5AAFFE;--cobalt:#1F22B2;
- --ink:#120318;--paper:#fff;--bg:#f5f1f9;--bg2:#ece4f5;--line:#e4dbf0;
- --muted:#6b5f78;--muted2:#9a8ea8;--good:#15a34a;--max:1100px;
- --sans:'Hanken Grotesk',-apple-system,BlinkMacSystemFont,sans-serif;
- --mono:'IBM Plex Mono',ui-monospace,monospace;}
+ --ink:#0A0A0A;--paper:#fff;--bg:#f5f1f9;--bg2:#ece4f5;--line:#e4dbf0;
+ --muted:#6b5f78;--muted2:#9a8ea8;--good:#047857;--max:1100px;
+ --sans:'DM Sans',-apple-system,BlinkMacSystemFont,sans-serif;
+ --mono:'DM Mono',ui-monospace,SFMono-Regular,monospace;
+ --status-red-bg:#DC2626;--status-red-fg:#991B1B;
+ --status-amber-bg:#D97706;--status-amber-fg:#92400E;
+ --status-green-bg:#047857;--status-green-fg:#065F46;
+ --status-blue-bg:#1F22B2;--status-blue-fg:#1E40AF;}
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:var(--sans);background:var(--bg);color:var(--ink);line-height:1.55;-webkit-font-smoothing:antialiased}
 .wrap{max-width:var(--max);margin:0 auto;padding:0 26px}
@@ -225,25 +231,21 @@ body{font-family:var(--sans);background:var(--bg);color:var(--ink);line-height:1
 .brandlogo{display:flex;align-items:center;gap:9px;color:#fff;font-weight:800}
 .brandlogo .dot{width:9px;height:9px;border-radius:50%;background:var(--electric);box-shadow:0 0 14px var(--electric)}
 .confid{font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.55)}
-.hero{background:var(--purple);color:#fff;position:relative;overflow:hidden;padding:58px 0 66px}
-.hero::before{content:"";position:absolute;inset:0;background:radial-gradient(60% 90% at 84% 6%,rgba(194,49,255,.42),transparent 60%),radial-gradient(50% 70% at 6% 94%,rgba(90,175,254,.3),transparent 60%)}
-.hero .wrap{position:relative;z-index:2}
-.hero .eyebrow{color:var(--sky)}
-.hero h1{font-size:clamp(30px,5vw,50px);line-height:1.05;font-weight:900;letter-spacing:-.03em;margin:14px 0 0}
-.hero h1 em{font-style:normal;background:linear-gradient(100deg,var(--electric),var(--sky));-webkit-background-clip:text;background-clip:text;color:transparent}
-.hero .sub{max-width:740px;color:rgba(255,255,255,.85);font-size:16px;margin-top:18px}
-.heroband{margin-top:34px;display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.14);border-radius:14px;overflow:hidden}
-.heroband .cell{background:rgba(18,3,24,.55);padding:18px 20px}
-.heroband .cell.focus{background:rgba(194,49,255,.16);box-shadow:inset 3px 0 0 var(--electric)}
-.heroband .cell.focus .k{color:rgba(255,255,255,.85)}
-.heroband .youtag{font-family:var(--mono);font-size:8px;letter-spacing:.06em;background:var(--electric);color:#fff;border-radius:4px;padding:1px 5px;margin-left:5px;vertical-align:middle}
-.heroband .k{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,.55)}
-.heroband .v{font-size:29px;font-weight:800;margin-top:8px;letter-spacing:-.02em}
-.heroband .v.accent{color:var(--electric)}
-.heroband .v .u{font-size:13px;color:rgba(255,255,255,.6);font-weight:600}
+.cover{height:100vh;max-height:1080px;background:var(--purple);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:48px 48px;position:relative;overflow:hidden}
+.cover::before{content:"";position:absolute;top:-200px;right:-200px;width:600px;height:600px;background:radial-gradient(circle,rgba(194,49,255,.2) 0%,transparent 70%);pointer-events:none}
+.cover::after{content:"";position:absolute;bottom:-150px;left:-150px;width:500px;height:500px;background:radial-gradient(circle,rgba(90,175,254,.12) 0%,transparent 70%);pointer-events:none}
+.cover-accent-bar{width:60px;height:3px;background:var(--electric);border-radius:2px;margin-bottom:20px}
+.cover-brand{font-size:12px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:var(--electric);margin-bottom:12px}
+.cover-title{font-size:clamp(24px,3.5vw,40px);font-weight:700;color:#fff;text-align:center;line-height:1.2;margin-bottom:10px;max-width:650px}
+.cover-subtitle{font-size:17px;font-weight:300;color:rgba(255,255,255,.5);margin-bottom:36px;letter-spacing:.05em}
+.cover-divider{width:100%;max-width:480px;height:1px;background:linear-gradient(90deg,transparent,rgba(90,175,254,.5),transparent);margin-bottom:32px}
+.cover-meta{display:grid;grid-template-columns:auto 1fr;gap:8px 20px;max-width:480px;width:100%}
+.meta-label{font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--sky);padding:3px 0;white-space:nowrap}
+.meta-value{font-size:12px;color:rgba(255,255,255,.65);padding:3px 0;border-bottom:1px solid rgba(255,255,255,.08)}
+@media print{.cover{page-break-after:always;height:auto;max-height:none}}
 section{padding:46px 0;border-bottom:1px solid var(--line)}
 .sechead{display:flex;align-items:baseline;gap:15px}
-.secnum{font-family:var(--mono);font-size:13px;font-weight:600;color:#fff;background:var(--purple);width:36px;height:36px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex:none}
+.secnum{font-family:var(--mono);font-size:13px;font-weight:600;color:#fff;background:var(--electric);width:36px;height:36px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex:none}
 .sechead h2{font-size:clamp(21px,3vw,29px);font-weight:800;letter-spacing:-.02em}
 .sec-intro{color:var(--muted);font-size:15.5px;max-width:830px;margin:12px 0 24px;padding-left:51px}
 .badge{position:relative;width:36px;height:36px;border-radius:9px;flex:none;overflow:hidden;background:#fff;border:1px solid var(--line)}
@@ -252,6 +254,7 @@ section{padding:46px 0;border-bottom:1px solid var(--line)}
 .badge .lg{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#fff;z-index:2}
 .lb{background:var(--paper);border:1px solid var(--line);border-radius:14px;overflow:hidden}
 .lbrow{display:grid;align-items:center;gap:16px;padding:13px 20px;border-top:1px solid var(--line)}
+.lbrow:nth-child(even){background:#FAFAFD}
 .lbrow.head{background:var(--bg)}.lbrow:first-child{border-top:none}
 .lbrow.head span{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted2)}
 .lbrank{font-family:var(--mono);font-weight:600;font-size:15px;color:var(--muted2)}
@@ -302,24 +305,76 @@ section{padding:46px 0;border-bottom:1px solid var(--line)}
 .stats .v{font-size:22px;font-weight:800;margin-top:6px;letter-spacing:-.02em}
 .bandbar{height:14px;border-radius:6px;overflow:hidden;display:flex;margin:14px 0 6px}
 .bandbar i{height:100%}
-.skuopt{display:grid;gap:15px}
-.sku-card{display:grid;grid-template-columns:92px 1fr;gap:16px;background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:15px;overflow:hidden}
-.sku-img{width:92px;height:92px;border-radius:10px;overflow:hidden;background:var(--bg2);display:flex;align-items:center;justify-content:center;font-size:1.9rem}
-.sku-img img{width:100%;height:100%;object-fit:cover}
-.sku-main{min-width:0}
-.sku-meta{font-family:var(--mono);font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted2);margin-bottom:9px}
-.sku-meta b{color:var(--electric)}
-.sku-meta .asin{color:var(--muted)}
-.sku-before,.sku-after{margin-bottom:8px}
-.sku-before .lab,.sku-after .lab,.sku-targets .lab{font-family:var(--mono);font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted2);display:block;margin-bottom:3px}
-.sku-before p{font-size:13px;color:var(--muted);text-decoration:line-through;text-decoration-color:var(--muted2)}
-.sku-after p{font-size:14.5px;font-weight:700;color:var(--ink)}
-.sku-after .lab{color:var(--electric)}
-.sku-targets{margin:10px 0 8px}
+.pdp-opt{background:var(--paper);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.pdp-header{padding:22px 24px 18px;border-bottom:1px solid var(--line)}
+.pdp-header-label{font-family:var(--mono);font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted2);margin-bottom:12px}
+.pdp-header-body{display:flex;gap:20px;align-items:flex-start}
+.pdp-header-img{width:80px;height:80px;object-fit:contain;border:1px solid var(--line);border-radius:8px;flex:none;background:#fff}
+.pdp-header-info{min-width:0;flex:1}
+.pdp-header-title{font-size:17px;font-weight:700;color:var(--ink);line-height:1.4;margin-bottom:10px}
+.pdp-header-stats{display:flex;gap:16px;margin-top:12px}
+.pdp-stat{display:flex;flex-direction:column;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 14px;min-width:80px}
+.pdp-stat-val{font-size:18px;font-weight:800;color:var(--ink);letter-spacing:-.02em}
+.pdp-stat-lbl{font-family:var(--mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-top:2px}
+.pdp-asin-badge{display:inline-flex;align-items:center;gap:4px;font-family:var(--mono);font-size:10.5px;letter-spacing:.04em;color:var(--sky);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:3px 10px;text-decoration:none}
+.pdp-asin-badge:hover{background:var(--bg2)}
+.pdp-section{padding:20px 24px;border-bottom:1px solid var(--line)}
+.pdp-section:last-child{border-bottom:none}
+.pdp-compare{display:grid;grid-template-columns:1fr 1fr;gap:0}
+.pdp-compare.full{grid-template-columns:1fr}
+@media(max-width:800px){.pdp-compare{grid-template-columns:1fr}}
+.pdp-before,.pdp-after{min-width:0;padding:16px 0}
+.pdp-compare .pdp-after{border-left:1px solid var(--line);padding-left:20px}
+.pdp-compare.full .pdp-after{border-left:none;padding-left:0}
+.pdp-sec-bar{display:flex;align-items:center;gap:10px;background:var(--purple);color:#fff;padding:10px 16px;border-radius:8px;margin-bottom:14px;font-size:13px;font-weight:600}
+.pdp-sec-pill{font-family:var(--mono);font-size:10px;letter-spacing:.06em;padding:3px 10px;border-radius:4px}
+.pdp-sec-bar.cur .pdp-sec-pill{background:rgba(255,255,255,.15);color:rgba(255,255,255,.8)}
+.pdp-sec-bar.rec .pdp-sec-pill{background:rgba(194,49,255,.2);color:var(--accent)}
+.pdp-before p{font-size:13.5px;color:var(--muted);line-height:1.6}
+.pdp-after p{font-size:13.5px;font-weight:600;color:var(--ink);line-height:1.6}
+.pdp-before ul,.pdp-after ul{margin:0;padding:0;list-style:none;font-size:13px;line-height:1.7}
+.pdp-before ul{color:var(--muted)}
+.pdp-after ul{color:var(--ink)}
+.pdp-before li,.pdp-after li{display:flex;gap:10px;margin-bottom:8px}
+.pdp-before li:last-child,.pdp-after li:last-child{margin-bottom:0}
+.pdp-bullet-num{flex:none;width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:10px;font-weight:700;margin-top:2px}
+.pdp-before .pdp-bullet-num{background:var(--bg2);color:var(--muted2)}
+.pdp-after .pdp-bullet-num{background:var(--electric);color:#fff}
+.pdp-bullet-text{min-width:0}
+.pdp-desc-text{font-size:13px;line-height:1.65}
+.ih-text{font-size:14px;font-weight:500;color:var(--ink);line-height:1.55;margin-top:4px}
+.pdp-reasons{display:grid;grid-template-columns:repeat(2,1fr);gap:6px 20px;margin-top:18px;padding-top:14px;border-top:1px solid var(--line)}
+@media(max-width:800px){.pdp-reasons{grid-template-columns:1fr}}
+.pdp-reason{display:flex;gap:7px;align-items:flex-start;font-size:12px;line-height:1.5;padding:2px 0}
+.pdp-reason div{min-width:0}
+.reason-icon{flex:none;font-size:12px;font-weight:700;margin-top:1px}
+.reason-keep .reason-icon{color:var(--status-green-fg)}
+.reason-add .reason-icon{color:var(--status-blue-fg)}
+.reason-remove .reason-icon{color:var(--status-red-fg)}
+.reason-label{font-weight:700;color:var(--ink);word-break:break-word}
+.reason-detail{color:var(--muted);word-break:break-word}
+.pdp-reason-legend{display:flex;gap:18px;font-family:var(--mono);font-size:10px;letter-spacing:.06em;margin-top:14px;padding:8px 0}
+.pdp-reason-legend span{display:inline-flex;align-items:center;gap:5px}
+.pdp-sec-title{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;color:var(--purple);margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+.pdp-analysis{background:var(--bg);border-bottom:none}
+.analysis-group{margin-bottom:16px}
+.analysis-group:last-child{margin-bottom:0}
+.analysis-label{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--purple);font-weight:700;margin-bottom:8px}
+.tier-group{border-radius:8px;padding:10px 14px;margin-bottom:8px}
+.tier-group:last-child{margin-bottom:0}
+.tier-a{background:rgba(4,120,87,.08);border-left:3px solid var(--status-green-bg)}
+.tier-b{background:rgba(217,119,6,.08);border-left:3px solid var(--status-amber-bg)}
+.tier-c{background:rgba(220,38,38,.08);border-left:3px solid var(--status-red-bg)}
+.tier-label{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;display:block;margin-bottom:4px}
+.tier-a .tier-label{color:var(--status-green-fg)}
+.tier-b .tier-label{color:var(--status-amber-fg)}
+.tier-c .tier-label{color:var(--status-red-fg)}
+.tier-group ul{margin:0;padding-left:16px;font-size:12px;color:var(--ink);line-height:1.6}
+.sim-list{margin-bottom:8px}
+.sim-key{font-size:11px;font-weight:600;color:var(--ink);display:block;margin-bottom:4px}
+.sim-list ol{margin:0;padding-left:18px;font-size:12px;color:var(--muted);line-height:1.6}
+.seo-notes{font-size:12.5px;color:var(--muted);line-height:1.65;background:var(--paper);border-radius:8px;padding:12px 14px}
 .chip{display:inline-block;font-size:11px;background:var(--bg2);color:var(--purple);border:1px solid var(--line);border-radius:100px;padding:3px 11px;margin:0 5px 5px 0;font-weight:600}
-.sku-why{display:flex;gap:9px;align-items:flex-start;background:var(--bg);border-left:3px solid var(--electric);border-radius:0 8px 8px 0;padding:8px 12px;font-size:13px;color:var(--muted)}
-.sku-why .ic{font-family:var(--mono);color:var(--electric);flex:none}
-.sku-why b{color:var(--ink)}
 .levers{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 .lever{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:22px;position:relative;overflow:hidden}
 .lever::before{content:"";position:absolute;left:0;top:0;right:0;height:4px}
@@ -602,45 +657,185 @@ def _incr_body(incr: dict) -> str:
     return stats + bandblock + kwcard
 
 
-def _sku_opt_cards(items: list[dict]) -> str:
-    """Cards for underperforming SKUs: thumbnail, current vs optimized title,
-    target keywords, and the ranking rationale."""
-    if not items:
+def _sku_pdp_card(card: dict) -> str:
+    """Full PDP optimization card: title, bullets, description, analysis."""
+    if not card:
         return ""
-    out = ['<div class="skuopt">']
-    for it in items:
-        img = str(it.get("image_url", "") or "")
-        img_html = (f'<img src="{_html.escape(img)}" alt="">' if img.startswith("http")
-                    else "📦")
-        chips = "".join(f'<span class="chip">{_html.escape(str(t))}</span>'
-                        for t in (it.get("target_keywords") or []))
-        chips_html = (f'<div class="sku-targets"><span class="lab">Target keywords '
-                      f'(build the title to win these)</span>{chips}</div>'
-                      if chips else "")
-        avg = it.get("avg_rank", 0) or 0
-        url = str(it.get("product_page_url", "") or "")
-        asin_html = (f'<a href="{_html.escape(url)}" target="_blank" '
-                     f'style="color:var(--sky);text-decoration:none">{_html.escape(str(it["sku"]))} &#8599;</a>'
-                     if url.startswith("http") else _html.escape(str(it["sku"])))
-        cur = str(it.get("current_title", "") or "(no current title on record)")
-        opt = str(it.get("optimized_title", "") or "")
-        why = it.get("rationale", "")
+    e = _html.escape
+
+    url = str(card.get("product_page_url", card.get("amazonUrl", "")) or "")
+    asin = str(card.get("asin", ""))
+    cur_title = str(card.get("currentTitle", "") or "(no current title)")
+    opt_title = str(card.get("recommendedTitle", "") or "")
+
+    asin_link = (f'<a class="pdp-asin-badge" href="{e(url)}" target="_blank">'
+                 f'{e(asin)} &#8599;</a>'
+                 if url.startswith("http")
+                 else f'<span class="pdp-asin-badge">{e(asin)}</span>')
+
+
+    img_url = str(card.get("image_url", "") or "")
+    avg_rank = card.get("avg_rank", 0)
+    kw_count = card.get("keywords", 0)
+    p1_count = card.get("page1_kws", 0)
+
+    img_html = (f'<img class="pdp-header-img" src="{e(img_url)}" alt="product">'
+                if img_url.startswith("http") else "")
+
+    stats_html = (
+        '<div class="pdp-header-stats">'
+        f'<div class="pdp-stat"><span class="pdp-stat-val">{avg_rank}</span>'
+        f'<span class="pdp-stat-lbl">Avg Rank</span></div>'
+        f'<div class="pdp-stat"><span class="pdp-stat-val">{kw_count}</span>'
+        f'<span class="pdp-stat-lbl">Keywords</span></div>'
+        '</div>'
+    )
+
+    out = [
+        '<div class="pdp-opt">',
+        f'<div class="pdp-header">'
+        f'<div class="pdp-header-label">Product being optimized</div>'
+        f'<div class="pdp-header-body">'
+        f'{img_html}'
+        f'<div class="pdp-header-info">'
+        f'<div class="pdp-header-title">{e(cur_title)}</div>'
+        f'{asin_link}'
+        f'{stats_html}'
+        f'</div></div></div>',
+    ]
+
+    sec_cur = ('<div class="pdp-sec-bar cur">'
+               '<span class="pdp-sec-pill">Current</span>')
+    sec_rec = ('<div class="pdp-sec-bar rec">'
+               '<span class="pdp-sec-pill">Optimized</span>')
+
+    # ── Title comparison
+    out.append(
+        f'<div class="pdp-section">'
+        f'<div class="pdp-compare">'
+        f'<div class="pdp-before">{sec_cur} Title</div>'
+        f'<p>{e(cur_title)}</p></div>'
+        f'<div class="pdp-after">{sec_rec} Title</div>'
+        f'<p>{e(opt_title)}</p></div>'
+        f'</div>')
+    out.append(_reason_chips(card.get("titleReasons", [])))
+    out.append('</div>')
+
+    # ── Item Highlights
+    highlights = str(card.get("itemHighlights", "") or "")
+    if highlights:
         out.append(
-            f'<div class="sku-card">'
-            f'<div class="sku-img">{img_html}</div>'
-            f'<div class="sku-main">'
-            f'<div class="sku-meta"><span class="asin">ASIN {asin_html}</span> &nbsp;·&nbsp; '
-            f'avg rank <b>#{avg:.1f}</b> &nbsp;·&nbsp; {it.get("keywords", 0)} keywords &nbsp;·&nbsp; '
-            f'{it.get("page1_kws", 0)} on page&nbsp;1</div>'
-            f'<div class="sku-before"><span class="lab">Current title</span>'
-            f'<p>{_html.escape(cur)}</p></div>'
-            f'<div class="sku-after"><span class="lab">Optimized title ✨ '
-            f'({len(opt)}/200 chars)</span><p>{_html.escape(opt)}</p></div>'
-            f'{chips_html}'
-            + (f'<div class="sku-why"><span class="ic">▌</span>'
-               f'<span>{_inl(why)}</span></div>' if why else "")
-            + '</div></div>')
-    out.append("</div>")
+            f'<div class="pdp-section">'
+            f'{sec_rec} Item Highlights</div>'
+            f'<p class="ih-text">{e(highlights)}</p></div>')
+
+    # ── Bullets comparison (always side-by-side)
+    cur_bullets = card.get("currentBullets") or []
+    rec_bullets = card.get("recommendedBullets") or []
+    if rec_bullets:
+        out.append(f'<div class="pdp-section"><div class="pdp-compare">')
+        out.append(f'<div class="pdp-before">{sec_cur} Bullets</div><ul>')
+        if cur_bullets:
+            for i, b in enumerate(cur_bullets, 1):
+                out.append(
+                    f'<li><span class="pdp-bullet-num">{i}</span>'
+                    f'<span class="pdp-bullet-text">{e(str(b))}</span></li>')
+        else:
+            out.append('<li><span class="pdp-bullet-text" style="color:var(--muted2);'
+                       'font-style:italic">No current bullets available</span></li>')
+        out.append('</ul></div>')
+        out.append(f'<div class="pdp-after">{sec_rec} Bullets</div><ul>')
+        for i, b in enumerate(rec_bullets, 1):
+            text = b.get("text", b) if isinstance(b, dict) else str(b)
+            out.append(
+                f'<li><span class="pdp-bullet-num">{i}</span>'
+                f'<span class="pdp-bullet-text">{e(str(text))}</span></li>')
+        out.append('</ul></div></div>')
+        out.append(_reason_chips(card.get("bulletReasons", [])))
+        out.append('</div>')
+
+    # ── Description comparison (always side-by-side)
+    cur_desc = str(card.get("currentDescription", "") or "")
+    rec_desc = str(card.get("recommendedDescription", "") or "")
+    if rec_desc:
+        out.append(f'<div class="pdp-section"><div class="pdp-compare">')
+        out.append(
+            f'<div class="pdp-before">{sec_cur} Description</div>'
+            f'<p class="pdp-desc-text">{e(cur_desc) if cur_desc else "<em style=&quot;color:var(--muted2)&quot;>No current description available</em>"}</p></div>')
+        out.append(
+            f'<div class="pdp-after">{sec_rec} Description</div>'
+            f'<p class="pdp-desc-text">{e(rec_desc)}</p></div>'
+            f'</div>')
+        out.append(_reason_chips(card.get("descriptionReasons", [])))
+        out.append('</div>')
+
+    # ── Self-directed analysis (credibility + intent + SEO/AEO)
+    sda = card.get("selfDirectedAnalysis") or {}
+    if sda:
+        out.append(_self_directed_block(sda))
+
+    out.append('</div>')
+    return "".join(out)
+
+
+_REASON_LEGEND = (
+    '<div class="pdp-reason-legend">'
+    '<span class="reason-keep"><span class="reason-icon">✓</span> Retained</span>'
+    '<span class="reason-add"><span class="reason-icon">+</span> Added</span>'
+    '<span class="reason-remove"><span class="reason-icon">✕</span> Removed</span>'
+    '</div>'
+)
+
+
+def _reason_chips(reasons: list[dict]) -> str:
+    """Render change reasons as compact grid items with inline icon + label — detail."""
+    if not reasons:
+        return ""
+    out = [_REASON_LEGEND, '<div class="pdp-reasons">']
+    for r in reasons:
+        rtype = r.get("type", "add")
+        icon = {"keep": "✓", "add": "+", "remove": "✕"}.get(rtype, "·")
+        cls = f"reason-{rtype}"
+        label = str(r.get("label", ""))[:120]
+        detail = str(r.get("detail", ""))
+        detail_html = (f' <span class="reason-detail">&mdash; {_html.escape(detail)}</span>'
+                       if detail else "")
+        out.append(
+            f'<div class="pdp-reason {cls}">'
+            f'<span class="reason-icon">{icon}</span>'
+            f'<div><span class="reason-label">{_html.escape(label)}</span>'
+            f'{detail_html}</div></div>')
+    out.append('</div>')
+    return "".join(out)
+
+
+def _self_directed_block(sda: dict) -> str:
+    """Render credibility profile, intent model, and SEO/AEO notes."""
+    e = _html.escape
+    out = [
+        '<div class="pdp-section pdp-analysis">'
+        '<div class="pdp-sec-title">Optimization Analysis</div>'
+    ]
+
+    ccp = sda.get("content_credibility_profile") or {}
+    if ccp:
+        out.append('<div class="analysis-group">'
+                   '<div class="analysis-label">Content Credibility Profile</div>')
+        for tier, label, cls in [
+            ("carry_forward", "Carry Forward (Tier A)", "tier-a"),
+            ("softened", "Softened (Tier B)", "tier-b"),
+            ("removed", "Removed (Tier C)", "tier-c"),
+        ]:
+            items = ccp.get(tier) or []
+            if items:
+                out.append(f'<div class="tier-group {cls}">'
+                           f'<span class="tier-label">{label}</span><ul>')
+                for item in items:
+                    out.append(f'<li>{e(str(item))}</li>')
+                out.append('</ul></div>')
+        out.append('</div>')
+
+    out.append('</div>')
     return "".join(out)
 
 
@@ -652,21 +847,29 @@ def build_themed_report(scope: dict, ins: dict, d: dict,
     rank_txt = f" · #{h['rank']}" if h.get("rank") else ""
     src = "AI · OpenAI" if narrative_source == "openai" else "rule-based"
 
+    kw_count = scope.get("extras", {}).get("total_keywords", "")
+    kw_line = f'{kw_count} search terms analysed' if kw_count else ""
+
     hero = (
-        f'<header class="hero"><div class="wrap">'
-        f'<div class="eyebrow">Share of Search Report · {_html.escape(cat)} · Amazon · '
-        f'{_html.escape(str(scope.get("metric_label", "")))}</div>'
-        f'<h1>Win Your <em>Share of Search</em><br>in {_html.escape(cat)}</h1>'
-        f'<p class="sub">{_inl(ins.get("verdict", ""))}</p>'
-        f'<div class="heroband">'
-        f'<div class="cell focus"><div class="k">{_html.escape(brand)} · your position '
-        f'<span class="youtag">YOU</span></div>'
-        f'<div class="v accent">{h.get("your_sov", 0):.2f}<span class="u">% SOV{rank_txt}</span></div></div>'
-        f'<div class="cell"><div class="k">Organic SOV</div>'
-        f'<div class="v">{h.get("organic", 0):.2f}<span class="u">%</span></div></div>'
-        f'<div class="cell"><div class="k">Paid SOV</div>'
-        f'<div class="v">{h.get("paid", 0):.2f}<span class="u">%</span></div></div>'
-        f'</div></div></header>')
+        f'<div class="cover">'
+        f'<div class="cover-accent-bar"></div>'
+        f'<div class="cover-brand">CommerceIQ Intelligence</div>'
+        f'<h1 class="cover-title">Share of Search &amp; Competitive Intelligence Report</h1>'
+        f'<div class="cover-subtitle">{_html.escape(brand)}</div>'
+        f'<div class="cover-divider"></div>'
+        f'<div class="cover-meta">'
+        f'<span class="meta-label">Prepared by</span>'
+        f'<span class="meta-value">CommerceIQ Strategic Intelligence Team</span>'
+        f'<span class="meta-label">Prepared for</span>'
+        f'<span class="meta-value">{_html.escape(brand)} Retail Media Leadership</span>'
+        f'<span class="meta-label">Category</span>'
+        f'<span class="meta-value">{_html.escape(cat)} — Amazon US</span>'
+        + (f'<span class="meta-label">Keywords</span>'
+           f'<span class="meta-value">{_html.escape(str(kw_line))}</span>'
+           if kw_line else "")
+        + f'<span class="meta-label">Status</span>'
+        f'<span class="meta-value">Confidential — For Internal Use Only</span>'
+        f'</div></div>')
 
     secs = []
     n = 1
@@ -694,24 +897,12 @@ def build_themed_report(scope: dict, ins: dict, d: dict,
                                  "no organic or paid presence at all."),
             _kwlines(d["zero_sov"], "crawls", "crawls", "searches", fmt="count")))
         n += 1
-    if d.get("sku_opt") and d["sku_opt"].get("items"):
+    if d.get("sku_opt") and d["sku_opt"].get("card"):
         so = d["sku_opt"]
         secs.append(_section(
-            f"{n:02d}", "SKU Optimization — Biggest Ranking Wins",
-            so.get("intro", ""), _sku_opt_cards(so["items"]),
+            f"{n:02d}", "SKU Optimization",
+            so.get("intro", ""), _sku_pdp_card(so["card"]),
             note=ins.get("sku_opt", "")))
-        n += 1
-    if d.get("incr"):
-        secs.append(_section(f"{n:02d}", "Ad Incrementality & Efficiency",
-                             d["incr"].get("intro", ""), _incr_body(d["incr"]),
-                             note=ins.get("incrementality", "")))
-        n += 1
-    elif d.get("incrementality"):
-        legend = ('<span><i style="background:#C231FF"></i>Organic</span>'
-                  '<span><i style="background:#5AAFFE"></i>Paid (incremental)</span>')
-        secs.append(_section(f"{n:02d}", "Organic vs Paid — by Keyword",
-                             ins.get("incrementality", ""), _inc_lines(d["incrementality"]),
-                             legend=legend))
         n += 1
     # How you win (generic levers)
     levers = (
@@ -749,7 +940,7 @@ def build_themed_report(scope: dict, ins: dict, d: dict,
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{_html.escape(str(scope.get("name") or f"Share of Search — {cat} · {brand}"))}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800;900&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>{_THEME_CSS}</style></head><body>
 <div class="topbar"><div class="wrap"><div class="brandlogo"><span class="dot"></span>CommerceIQ</div>
 <div class="confid">Generated report</div></div></div>
@@ -812,19 +1003,24 @@ def build_category_report(scope: dict, ins: dict, d: dict,
     h = d.get("hero", {})  # {top_brand, top_sov, brands, keywords}
 
     hero = (
-        f'<header class="hero"><div class="wrap">'
-        f'<div class="eyebrow">Category Share of Search · {_html.escape(cat)} · Amazon</div>'
-        f'<h1>Who Owns <em>{_html.escape(cat)}</em>?</h1>'
-        f'<p class="sub">{_inl(ins.get("verdict", ""))}</p>'
-        f'<div class="heroband">'
-        f'<div class="cell"><div class="k">Category Leader</div>'
-        f'<div class="v accent">{_html.escape(str(h.get("top_brand", "—")))}'
-        f'<span class="u"> · {h.get("top_sov", 0):.1f}% SOV</span></div></div>'
-        f'<div class="cell"><div class="k">Brands Competing</div>'
-        f'<div class="v">{h.get("brands", 0):,}</div></div>'
-        f'<div class="cell"><div class="k">Keywords Tracked</div>'
-        f'<div class="v">{h.get("keywords", 0):,}</div></div>'
-        f'</div></div></header>')
+        f'<div class="cover">'
+        f'<div class="cover-accent-bar"></div>'
+        f'<div class="cover-brand">CommerceIQ Intelligence</div>'
+        f'<h1 class="cover-title">Category Share of Search Intelligence Report</h1>'
+        f'<div class="cover-subtitle">{_html.escape(cat)}</div>'
+        f'<div class="cover-divider"></div>'
+        f'<div class="cover-meta">'
+        f'<span class="meta-label">Prepared by</span>'
+        f'<span class="meta-value">CommerceIQ Strategic Intelligence Team</span>'
+        f'<span class="meta-label">Category</span>'
+        f'<span class="meta-value">{_html.escape(cat)} — Amazon US</span>'
+        f'<span class="meta-label">Brands</span>'
+        f'<span class="meta-value">{h.get("brands", 0):,} brands competing</span>'
+        f'<span class="meta-label">Keywords</span>'
+        f'<span class="meta-value">{h.get("keywords", 0):,} search terms tracked</span>'
+        f'<span class="meta-label">Status</span>'
+        f'<span class="meta-value">Confidential — For Internal Use Only</span>'
+        f'</div></div>')
 
     secs = []
     n = 1
@@ -893,8 +1089,8 @@ def build_category_report(scope: dict, ins: dict, d: dict,
         f'<meta name="viewport" content="width=device-width, initial-scale=1">'
         f'<title>{_html.escape(str(scope.get("name") or f"Category SoS — {cat}"))}</title>'
         f'<link rel="preconnect" href="https://fonts.googleapis.com">'
-        f'<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:'
-        f'wght@400;500;600;700;800;900&family=IBM+Plex+Mono:wght@400;500;600'
+        f'<link href="https://fonts.googleapis.com/css2?family=DM+Sans:'
+        f'wght@400;500;600;700;800;900&family=DM+Mono:wght@400;500'
         f'&display=swap" rel="stylesheet">'
         f'<style>{_THEME_CSS}</style></head><body>'
         f'<div class="topbar"><div class="wrap">'
@@ -1424,14 +1620,29 @@ def build_incrementality_report(scope: dict, ins: dict, d: dict,
 
     keywords = d.get("keywords", [])
 
-    # ── 01 Executive Summary (Hero) ──────────────────────────────────────
+    cat = _html.escape(_sentence(scope.get("category_value", "")))
+    kw_count = d.get("keyword_summary", {}).get("total_keywords", len(keywords))
+
+    # ── Cover page ───────────────────────────────────────────────────────
     hero = (
-        f'<header class="hero" id="exec"><div class="wrap">'
-        f'<div class="eyebrow">Incrementality Analysis · {brand} · Amazon</div>'
-        f'<h1>Where {brand} <em>Earns vs Buys</em> Shelf Space</h1>'
-        f'<p class="sub">{_inl(ins.get("verdict", ""))}</p>'
-        f'{_incr_hero_cards(h)}'
-        f'</div></header>')
+        f'<div class="cover" id="exec">'
+        f'<div class="cover-accent-bar"></div>'
+        f'<div class="cover-brand">CommerceIQ Intelligence</div>'
+        f'<h1 class="cover-title">Incrementality &amp; iROAS Intelligence Report</h1>'
+        f'<div class="cover-subtitle">{brand}</div>'
+        f'<div class="cover-divider"></div>'
+        f'<div class="cover-meta">'
+        f'<span class="meta-label">Prepared by</span>'
+        f'<span class="meta-value">CommerceIQ Strategic Intelligence Team</span>'
+        f'<span class="meta-label">Prepared for</span>'
+        f'<span class="meta-value">{brand} Retail Media Leadership</span>'
+        f'<span class="meta-label">Category</span>'
+        f'<span class="meta-value">{cat} — Amazon US</span>'
+        f'<span class="meta-label">Keywords</span>'
+        f'<span class="meta-value">{kw_count} search terms analysed</span>'
+        f'<span class="meta-label">Status</span>'
+        f'<span class="meta-value">Confidential — For Internal Use Only</span>'
+        f'</div></div>')
 
     # ── Sticky section nav (anchor jump links) ───────────────────────────
     _nav_items = [
@@ -1555,8 +1766,8 @@ def build_incrementality_report(scope: dict, ins: dict, d: dict,
         f'<meta name="viewport" content="width=device-width, initial-scale=1">'
         f'<title>{_html.escape(str(scope.get("name") or f"Incrementality — {brand}"))}</title>'
         f'<link rel="preconnect" href="https://fonts.googleapis.com">'
-        f'<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:'
-        f'wght@400;500;600;700;800;900&family=IBM+Plex+Mono:wght@400;500;600'
+        f'<link href="https://fonts.googleapis.com/css2?family=DM+Sans:'
+        f'wght@400;500;600;700;800;900&family=DM+Mono:wght@400;500'
         f'&display=swap" rel="stylesheet">'
         f'<style>{_THEME_CSS}'
         f'html{{scroll-behavior:smooth;scroll-padding-top:48px}}'

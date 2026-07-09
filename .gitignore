@@ -39,3 +39,5 @@ Thumbs.db
 ./sov_search_term_level_performance_post_output.csv
 ./sov_search_term_metadata_post_output.csv
 ./sov_search_term_sku_mapping_data_post_output.csv
+
+sku_card_*.json

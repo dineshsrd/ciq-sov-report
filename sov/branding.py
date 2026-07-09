@@ -43,7 +43,8 @@ SOV_SCALE = [
     [1.0, ELECTRIC],
 ]
 
-FONT_FAMILY = "Inter, Helvetica Neue, Arial, sans-serif"
+FONT_FAMILY = "DM Sans, -apple-system, BlinkMacSystemFont, sans-serif"
+MONO_FAMILY = "DM Mono, ui-monospace, SFMono-Regular, monospace"
 
 
 def color_for_brand(brand: str, is_client: bool, competitor_index: int) -> str:
@@ -56,7 +57,7 @@ def plotly_template() -> dict:
     """A lightweight Plotly layout template matching the brand."""
     return {
         "layout": {
-            "font": {"family": FONT_FAMILY, "color": BLACK, "size": 13},
+            "font": {"family": FONT_FAMILY, "color": "#0A0A0A", "size": 13},
             "paper_bgcolor": WHITE,
             "plot_bgcolor": WHITE,
             "colorway": [ELECTRIC, COBALT, SKY, DEEP_PURPLE, "#7A4FCF", "#2E8BEE"],
