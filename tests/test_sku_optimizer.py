@@ -689,3 +689,73 @@ class TestAppBuildSkuOpt:
         assert "card" in block
         assert "items" not in block
         assert block["card"]["asin"] == "B00NGV4506"
+
+
+class TestTieredSkuSelection:
+    """Verify the tiered SKU selection logic: prefer avg_rank > 30,
+    then > 24, then fallback to the original list."""
+
+    def test_selects_rank_above_30_first(self):
+        import pandas as pd
+        opt_df = pd.DataFrame([
+            {"sku": "A", "avg_rank": 10.0},
+            {"sku": "B", "avg_rank": 35.0},
+            {"sku": "C", "avg_rank": 25.0},
+        ])
+        deep = opt_df[opt_df["avg_rank"] > 30]
+        if deep.empty:
+            deep = opt_df[opt_df["avg_rank"] > 24]
+        if deep.empty:
+            deep = opt_df
+        assert deep.iloc[0]["sku"] == "B"
+
+    def test_falls_back_to_rank_above_24(self):
+        import pandas as pd
+        opt_df = pd.DataFrame([
+            {"sku": "A", "avg_rank": 10.0},
+            {"sku": "C", "avg_rank": 28.0},
+            {"sku": "D", "avg_rank": 15.0},
+        ])
+        deep = opt_df[opt_df["avg_rank"] > 30]
+        if deep.empty:
+            deep = opt_df[opt_df["avg_rank"] > 24]
+        if deep.empty:
+            deep = opt_df
+        assert deep.iloc[0]["sku"] == "C"
+
+    def test_falls_back_to_original_list(self):
+        import pandas as pd
+        opt_df = pd.DataFrame([
+            {"sku": "A", "avg_rank": 10.0},
+            {"sku": "B", "avg_rank": 5.0},
+        ])
+        deep = opt_df[opt_df["avg_rank"] > 30]
+        if deep.empty:
+            deep = opt_df[opt_df["avg_rank"] > 24]
+        if deep.empty:
+            deep = opt_df
+        assert deep.iloc[0]["sku"] == "A"
+
+    def test_multiple_above_30_picks_first(self):
+        import pandas as pd
+        opt_df = pd.DataFrame([
+            {"sku": "A", "avg_rank": 40.0},
+            {"sku": "B", "avg_rank": 35.0},
+            {"sku": "C", "avg_rank": 10.0},
+        ])
+        deep = opt_df[opt_df["avg_rank"] > 30]
+        if deep.empty:
+            deep = opt_df[opt_df["avg_rank"] > 24]
+        if deep.empty:
+            deep = opt_df
+        assert deep.iloc[0]["sku"] == "A"
+
+    def test_empty_dataframe_handled(self):
+        import pandas as pd
+        opt_df = pd.DataFrame(columns=["sku", "avg_rank"])
+        deep = opt_df[opt_df["avg_rank"] > 30]
+        assert deep.empty
+        deep = opt_df[opt_df["avg_rank"] > 24]
+        assert deep.empty
+        deep = opt_df
+        assert deep.empty

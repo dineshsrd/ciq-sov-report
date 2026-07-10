@@ -156,15 +156,13 @@ with st.sidebar:
     # ── Mode selector ────────────────────────────────────────────────────
     report_mode = st.radio(
         "Report type",
-        ["🔍 Brand Report", "📊 Category Report", "📈 Incrementality"],
+        ["🔍 Brand Report", "📊 Category Report"],
         horizontal=True,
         help="**Brand Report** — pick one brand and see how it ranks vs competitors.\n\n"
              "**Category Report** — see the full category landscape with no focus brand; "
-             "great for prospect outreach.\n\n"
-             "**Incrementality** — where a brand earns shelf space organically vs "
-             "buys it through ads, across all its categories.")
+             "great for prospect outreach.")
     is_category_mode = report_mode == "📊 Category Report"
-    is_incr_mode = report_mode == "📈 Incrementality"
+    is_incr_mode = False
 
     st.divider()
 
@@ -487,7 +485,12 @@ def _build_sku_opt(cid, level, category_value, focus_brand, kb):
                 f"or no SKU listings were captured for this brand/range).")
         return None
 
-    r = opt_df.iloc[0]
+    deep = opt_df[opt_df["avg_rank"] > 30]
+    if deep.empty:
+        deep = opt_df[opt_df["avg_rank"] > 24]
+    if deep.empty:
+        deep = opt_df
+    r = deep.iloc[0]
     sku_data = {
         "sku": str(r["sku"]),
         "title": str(r.get("title", "") or ""),
@@ -701,6 +704,16 @@ def _build_category_report(start, end):
 
     with st.spinner("Writing category insights…"):
         ins, src = narrative.generate_category_insights(context)
+
+    if top1 is not None:
+        ins["verdict"] = (
+            f"{top1['brand']} leads {category_value} with "
+            f"{float(top1['combined_sov']):.1f}% SOV across {nbrands:,} competing "
+            f"brands and {selected_kw:,} tracked keywords.")
+    else:
+        ins["verdict"] = (
+            f"{category_value} has {nbrands:,} brands competing across "
+            f"{selected_kw:,} keywords.")
 
     themed = {
         "hero": context["hero"],

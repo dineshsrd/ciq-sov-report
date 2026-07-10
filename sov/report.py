@@ -243,10 +243,28 @@ body{font-family:var(--sans);background:var(--bg);color:var(--ink);line-height:1
 .meta-label{font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--sky);padding:3px 0;white-space:nowrap}
 .meta-value{font-size:12px;color:rgba(255,255,255,.65);padding:3px 0;border-bottom:1px solid rgba(255,255,255,.08)}
 @media print{.cover{page-break-after:always;height:auto;max-height:none}}
-section{padding:46px 0;border-bottom:1px solid var(--line)}
+html{scroll-behavior:smooth;scroll-padding-top:48px}
+section{padding:56px 64px;border-bottom:1px solid var(--line);background:var(--paper)}
+.section-header{background:var(--purple);color:white;padding:18px 28px;display:flex;align-items:center;gap:16px;margin:-56px -64px 40px -64px}
+.section-num{font-family:var(--mono);font-size:12px;color:var(--electric);font-weight:500;letter-spacing:.1em;background:rgba(194,49,255,.15);padding:4px 10px;border-radius:4px;white-space:nowrap}
+.section-title{font-size:18px;font-weight:600;color:white}
 .sechead{display:flex;align-items:baseline;gap:15px}
 .secnum{font-family:var(--mono);font-size:13px;font-weight:600;color:#fff;background:var(--electric);width:36px;height:36px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex:none}
 .sechead h2{font-size:clamp(21px,3vw,29px);font-weight:800;letter-spacing:-.02em}
+.sticky-nav{position:sticky;top:0;z-index:100;background:rgba(33,2,53,.95);backdrop-filter:blur(10px);border-bottom:1px solid rgba(194,49,255,.3);padding:0 64px;display:flex;align-items:center;gap:4px;overflow-x:auto}
+.nav-item{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,.45);padding:14px 12px;white-space:nowrap;border-bottom:2px solid transparent;transition:all .2s;text-decoration:none}
+.nav-item:hover{color:var(--electric);border-bottom-color:var(--electric)}
+.exec-kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin:24px 0}
+.exec-kpi{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:22px;position:relative;overflow:hidden}
+.exec-kpi::before{content:"";position:absolute;left:0;top:0;right:0;height:4px;background:var(--c,var(--electric))}
+.exec-kpi-val{font-size:28px;font-weight:800;letter-spacing:-.02em;margin-top:6px}
+.exec-kpi-lbl{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted2);margin-top:4px}
+.prose{font-size:15px;color:var(--muted);line-height:1.7;max-width:800px}
+.prose strong{color:var(--ink)}
+.deliverables{list-style:none;padding:0;margin:18px 0 0}
+.deliverables li{display:flex;gap:10px;font-size:14px;color:var(--muted);padding:6px 0;border-bottom:1px dashed var(--line)}
+.deliverables li:last-child{border-bottom:none}
+.deliverables .dl-ic{flex:none;font-size:14px}
 .sec-intro{color:var(--muted);font-size:15.5px;max-width:830px;margin:12px 0 24px;padding-left:51px}
 .badge{position:relative;width:36px;height:36px;border-radius:9px;flex:none;overflow:hidden;background:#fff;border:1px solid var(--line)}
 .badge .ini{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;color:#fff;background:var(--c,#8a7f99)}
@@ -466,8 +484,11 @@ def _section(num: str, title: str, intro: str, body: str,
                  if note else "")
     intro_html = f'<p class="sec-intro">{_inl(intro)}</p>' if intro else ""
     legend_html = f'<div class="legend">{legend}</div>' if legend else ""
-    return (f'<section{id_attr}><div class="sechead"><span class="secnum">{num}</span>'
-            f'<h2>{_html.escape(title)}</h2></div>{intro_html}{legend_html}'
+    return (f'<section{id_attr}>'
+            f'<div class="section-header">'
+            f'<span class="section-num">SECTION {num}</span>'
+            f'<span class="section-title">{_html.escape(title)}</span></div>'
+            f'{intro_html}{legend_html}'
             f'{body}{note_html}</section>')
 
 
@@ -839,6 +860,108 @@ def _self_directed_block(sda: dict) -> str:
     return "".join(out)
 
 
+def _exec_summary(hero: dict, ins: dict, brand: str, cat: str) -> str:
+    """Executive Summary section: KPI cards + verdict + deliverables list."""
+    sov = hero.get("your_sov", 0)
+    rank = hero.get("rank", 0)
+    org = hero.get("organic", 0)
+    paid = hero.get("paid", 0)
+    verdict = ins.get("verdict", "")
+
+    kpis = (
+        '<div class="exec-kpi-row">'
+        f'<div class="exec-kpi" style="--c:var(--electric)">'
+        f'<div class="exec-kpi-val" style="color:var(--electric)">{sov:.1f}%</div>'
+        f'<div class="exec-kpi-lbl">Combined SOV</div></div>'
+        f'<div class="exec-kpi" style="--c:var(--good)">'
+        f'<div class="exec-kpi-val" style="color:var(--good)">#{rank}</div>'
+        f'<div class="exec-kpi-lbl">Category Rank</div></div>'
+        f'<div class="exec-kpi" style="--c:var(--electric)">'
+        f'<div class="exec-kpi-val">{org:.1f}</div>'
+        f'<div class="exec-kpi-lbl">Organic Pts</div></div>'
+        f'<div class="exec-kpi" style="--c:var(--status-amber-bg)">'
+        f'<div class="exec-kpi-val">{paid:.1f}</div>'
+        f'<div class="exec-kpi-lbl">Paid Pts</div></div>'
+        '</div>'
+    )
+
+    verdict_html = (
+        f'<div class="verdict" style="background:#FBF7FF;border-left:4px solid var(--electric);'
+        f'border-radius:8px;padding:14px 22px;font-size:15px;margin:22px 0">'
+        f'<p class="prose"><strong>{_html.escape(verdict)}</strong></p></div>'
+        if verdict else "")
+
+    deliverables = (
+        '<ul class="deliverables">'
+        f'<li><span class="dl-ic">📊</span> Share-of-Search leaderboard — where {_html.escape(brand)} '
+        f'ranks in {_html.escape(cat)}</li>'
+        '<li><span class="dl-ic">🔍</span> Sub-category breakdown — who owns each niche</li>'
+        '<li><span class="dl-ic">🎯</span> Keyword opportunities — whitespace and zero-SOV gaps</li>'
+        '<li><span class="dl-ic">🛠</span> SKU optimization — deep PDP content audit with AI</li>'
+        '<li><span class="dl-ic">🏆</span> How you win — organic and paid levers to grow share</li>'
+        '</ul>')
+
+    body = kpis + verdict_html + deliverables
+    return _section("01", "Executive Summary",
+                    f"A snapshot of {_html.escape(brand)}'s competitive position "
+                    f"in {_html.escape(cat)} and what this report covers.",
+                    body, section_id="exec")
+
+
+def _cat_exec_summary(hero: dict, ins: dict, cat: str) -> str:
+    """Executive Summary for Category report: KPI cards + verdict + deliverables."""
+    top_brand = _html.escape(str(hero.get("top_brand", "—")))
+    top_sov = hero.get("top_sov", 0)
+    nbrands = hero.get("brands", 0)
+    nkws = hero.get("keywords", 0)
+    verdict = ins.get("verdict", "")
+
+    kpis = (
+        '<div class="exec-kpi-row">'
+        f'<div class="exec-kpi" style="--c:var(--electric)">'
+        f'<div class="exec-kpi-val" style="color:var(--electric)">{top_brand}</div>'
+        f'<div class="exec-kpi-lbl">Top Brand · {top_sov:.1f}% SOV</div></div>'
+        f'<div class="exec-kpi" style="--c:var(--cobalt)">'
+        f'<div class="exec-kpi-val" style="color:var(--cobalt)">{nbrands:,}</div>'
+        f'<div class="exec-kpi-lbl">Brands Competing</div></div>'
+        f'<div class="exec-kpi" style="--c:var(--sky)">'
+        f'<div class="exec-kpi-val" style="color:var(--sky)">{nkws:,}</div>'
+        f'<div class="exec-kpi-lbl">Keywords Tracked</div></div>'
+        f'<div class="exec-kpi" style="--c:var(--good)">'
+        f'<div class="exec-kpi-val" style="color:var(--good)">{top_sov:.1f}%</div>'
+        f'<div class="exec-kpi-lbl">Leader SOV</div></div>'
+        '</div>')
+
+    verdict_html = (
+        f'<div class="verdict" style="background:#FBF7FF;border-left:4px solid var(--electric);'
+        f'border-radius:8px;padding:14px 22px;font-size:15px;margin:22px 0">'
+        f'<p class="prose"><strong>{_html.escape(verdict)}</strong></p></div>'
+        if verdict else "")
+
+    deliverables = (
+        '<ul class="deliverables">'
+        f'<li><span class="dl-ic">📊</span> Category leaderboard — who dominates '
+        f'{_html.escape(cat)}</li>'
+        '<li><span class="dl-ic">🔍</span> Sub-category breakdown — niche leaders</li>'
+        '<li><span class="dl-ic">🎯</span> Highest-demand keywords — where shoppers search</li>'
+        '<li><span class="dl-ic">🏆</span> How to win — organic and paid levers</li>'
+        '</ul>')
+
+    body = kpis + verdict_html + deliverables
+    return _section("01", "Executive Summary",
+                    f"A snapshot of the competitive landscape in "
+                    f"{_html.escape(cat)} and what this report covers.",
+                    body, section_id="exec")
+
+
+def _sticky_nav(sections: list[tuple[str, str]]) -> str:
+    """Build a sticky nav bar from a list of (anchor_id, label) tuples."""
+    links = "".join(
+        f'<a class="nav-item" href="#{_html.escape(sid)}">{_html.escape(lab)}</a>'
+        for sid, lab in sections)
+    return f'<nav class="sticky-nav">{links}</nav>'
+
+
 def build_themed_report(scope: dict, ins: dict, d: dict,
                         narrative_source: str = "template") -> str:
     cat = _sentence(scope.get("category_value", ""))
@@ -850,7 +973,7 @@ def build_themed_report(scope: dict, ins: dict, d: dict,
     kw_count = scope.get("extras", {}).get("total_keywords", "")
     kw_line = f'{kw_count} search terms analysed' if kw_count else ""
 
-    hero = (
+    hero_block = (
         f'<div class="cover">'
         f'<div class="cover-accent-bar"></div>'
         f'<div class="cover-brand">CommerceIQ Intelligence</div>'
@@ -871,40 +994,62 @@ def build_themed_report(scope: dict, ins: dict, d: dict,
         f'<span class="meta-value">Confidential — For Internal Use Only</span>'
         f'</div></div>')
 
+    # Build sections list with (anchor_id, nav_label, html) for nav generation
+    nav_entries: list[tuple[str, str]] = []
     secs = []
-    n = 1
+
+    # 01 — Executive Summary (always present)
+    nav_entries.append(("exec", "Executive Summary"))
+    secs.append(_exec_summary(h, ins, brand, cat))
+    n = 2
+
     if d.get("leaderboard"):
         legend = ('<span><i style="background:linear-gradient(90deg,#C231FF,#a01fe0)"></i>Organic</span>'
                   '<span><i style="background:linear-gradient(90deg,#5AAFFE,#1F22B2)"></i>Paid</span>')
+        sid = "lb"
+        nav_entries.append((sid, "Leaderboard"))
         secs.append(_section(f"{n:02d}", "Share-of-Search Leaderboard",
                              ins.get("organic_paid", ""), _combined_lb(d["leaderboard"]),
-                             note=ins.get("leaderboard", ""), legend=legend))
+                             note=ins.get("leaderboard", ""), legend=legend,
+                             section_id=sid))
         n += 1
     if d.get("subcats"):
+        sid = "subcats"
+        nav_entries.append((sid, "Sub-Categories"))
         secs.append(_section(f"{n:02d}", "Sub-Category Leaders",
                              ins.get("subcategories", ""), _subcards(d["subcats"], cat),
-                             note=ins.get("readiness", "")))
+                             note=ins.get("readiness", ""), section_id=sid))
         n += 1
     if d.get("whitespace"):
+        sid = "kws"
+        nav_entries.append((sid, "Opportunities"))
         secs.append(_section(f"{n:02d}", "Keyword Opportunities — Whitespace",
                              ins.get("keywords", ""),
-                             _kwlines(d["whitespace"], "crawls", "your_sov", "your SOV")))
+                             _kwlines(d["whitespace"], "crawls", "your_sov", "your SOV"),
+                             section_id=sid))
         n += 1
     if d.get("zero_sov"):
+        sid = "zero"
+        nav_entries.append((sid, "Missed Opportunities"))
         secs.append(_section(
             f"{n:02d}", "Top Missed Opportunities — Zero SOV",
             ins.get("zero_sov", "Highest-volume searches where you currently have "
                                  "no organic or paid presence at all."),
-            _kwlines(d["zero_sov"], "crawls", "crawls", "searches", fmt="count")))
+            _kwlines(d["zero_sov"], "crawls", "crawls", "searches", fmt="count"),
+            section_id=sid))
         n += 1
     if d.get("sku_opt") and d["sku_opt"].get("card"):
         so = d["sku_opt"]
+        sid = "sku"
+        nav_entries.append((sid, "SKU Optimization"))
         secs.append(_section(
             f"{n:02d}", "SKU Optimization",
             so.get("intro", ""), _sku_pdp_card(so["card"]),
-            note=ins.get("sku_opt", "")))
+            note=ins.get("sku_opt", ""), section_id=sid))
         n += 1
-    # How you win (generic levers)
+    # How you win (always present)
+    sid = "win"
+    nav_entries.append((sid, "How You Win"))
     levers = (
         '<div class="levers">'
         '<div class="lever org"><div class="tag">Lever 01 · Organic</div>'
@@ -918,7 +1063,9 @@ def build_themed_report(scope: dict, ins: dict, d: dict,
         'sponsored ads to capture paid real estate the moment a shopper searches — '
         'and measure incremental return.</p></div></div>')
     secs.append(_section(f"{n:02d}", "How You Win Share of Search",
-                         ins.get("how_you_win", ""), levers))
+                         ins.get("how_you_win", ""), levers, section_id=sid))
+
+    nav_bar = _sticky_nav(nav_entries)
 
     cta = (
         '<section class="cta"><div class="wrap">'
@@ -944,7 +1091,8 @@ def build_themed_report(scope: dict, ins: dict, d: dict,
 <style>{_THEME_CSS}</style></head><body>
 <div class="topbar"><div class="wrap"><div class="brandlogo"><span class="dot"></span>CommerceIQ</div>
 <div class="confid">Generated report</div></div></div>
-{hero}
+{hero_block}
+{nav_bar}
 <main class="wrap">{''.join(secs)}</main>
 {cta}{footer}
 </body></html>"""
@@ -1023,31 +1171,47 @@ def build_category_report(scope: dict, ins: dict, d: dict,
         f'</div></div>')
 
     secs = []
+    nav_entries: list[tuple[str, str]] = []
     n = 1
+
+    exec_sec = _cat_exec_summary(h, ins, cat)
+    secs.append(exec_sec)
+    nav_entries.append(("exec", "Executive Summary"))
+    n += 1
+
     if d.get("leaderboard"):
+        sid = "lb"
         legend = (
             '<span><i style="background:linear-gradient(90deg,#C231FF,#a01fe0)"></i>Organic</span>'
             '<span><i style="background:linear-gradient(90deg,#5AAFFE,#1F22B2)"></i>Paid</span>')
         secs.append(_section(
             f"{n:02d}", f"Category Leaderboard — {cat}",
             ins.get("leaderboard", ""), _combined_lb(d["leaderboard"]),
-            note=ins.get("organic_paid", ""), legend=legend))
+            note=ins.get("organic_paid", ""), legend=legend, section_id=sid))
+        nav_entries.append((sid, "Leaderboard"))
         n += 1
 
     if d.get("subcats"):
+        sid = "subcats"
         secs.append(_section(
             f"{n:02d}", "Sub-Category Breakdown",
             ins.get("subcategories", ""), _cat_subcards(d["subcats"], cat),
             note="No single brand dominates every sub-category — "
-                 "this is where challenger brands find their opening."))
+                 "this is where challenger brands find their opening.",
+            section_id=sid))
+        nav_entries.append((sid, "Sub-Categories"))
         n += 1
 
     if d.get("keywords"):
+        sid = "kws"
         secs.append(_section(
             f"{n:02d}", "Highest-Demand Keywords",
-            ins.get("keywords", ""), _demand_kwlines(d["keywords"])))
+            ins.get("keywords", ""), _demand_kwlines(d["keywords"]),
+            section_id=sid))
+        nav_entries.append((sid, "Keywords"))
         n += 1
 
+    sid = "win"
     levers = (
         '<div class="levers">'
         '<div class="lever org"><div class="tag">Lever 01 · Organic</div>'
@@ -1062,7 +1226,8 @@ def build_category_report(scope: dict, ins: dict, d: dict,
         'that\'s where incremental paid share is most available and cheapest to capture.</p></div></div>')
     secs.append(_section(
         f"{n:02d}", f"How to Win Share in {cat}",
-        ins.get("how_you_win", ""), levers))
+        ins.get("how_you_win", ""), levers, section_id=sid))
+    nav_entries.append((sid, "How to Win"))
 
     cta = (
         '<section class="cta"><div class="wrap">'
@@ -1084,6 +1249,8 @@ def build_category_report(scope: dict, ins: dict, d: dict,
         f'{_html.escape(str(scope.get("date_max", "")))}</span>'
         f'<span>Insights: {src}</span></div></footer>')
 
+    nav_bar = _sticky_nav(nav_entries)
+
     return (
         f'<!doctype html><html lang="en"><head><meta charset="utf-8">'
         f'<meta name="viewport" content="width=device-width, initial-scale=1">'
@@ -1098,6 +1265,7 @@ def build_category_report(scope: dict, ins: dict, d: dict,
         f'<div class="confid">Category Intelligence Report</div>'
         f'</div></div>'
         f'{hero}'
+        f'{nav_bar}'
         f'<main class="wrap">{"".join(secs)}</main>'
         f'{cta}{footer}'
         f'</body></html>'

@@ -113,15 +113,25 @@ class TestThemeCSSVariables:
 # ── Section header styling ─────────────────────────────────────────────────
 
 class TestSectionHeaderCSS:
-    def test_secnum_accent_pill(self):
-        assert "background:var(--electric)" in _THEME_CSS
-        assert ".secnum{" in _THEME_CSS
+    def test_section_header_exists(self):
+        assert ".section-header{" in _THEME_CSS
 
-    def test_secnum_white_text(self):
-        match = re.search(r"\.secnum\{[^}]+\}", _THEME_CSS)
+    def test_section_header_purple_bg(self):
+        match = re.search(r"\.section-header\{[^}]+\}", _THEME_CSS)
         assert match
-        secnum_css = match.group()
-        assert "color:#fff" in secnum_css
+        assert "var(--purple)" in match.group()
+
+    def test_section_num_accent(self):
+        assert ".section-num{" in _THEME_CSS
+        match = re.search(r"\.section-num\{[^}]+\}", _THEME_CSS)
+        assert match
+        assert "var(--electric)" in match.group()
+
+    def test_section_title_exists(self):
+        assert ".section-title{" in _THEME_CSS
+
+    def test_legacy_secnum_still_present(self):
+        assert ".secnum{" in _THEME_CSS
 
     def test_cover_purple_background(self):
         match = re.search(r"\.cover\{[^}]+\}", _THEME_CSS)
@@ -224,6 +234,41 @@ class TestLegacyStyleBlock:
 
 # ── Google Fonts links in generated HTML ───────────────────────────────────
 
+class TestStickyNavCSS:
+    def test_sticky_nav_exists(self):
+        assert ".sticky-nav{" in _THEME_CSS
+
+    def test_nav_item_exists(self):
+        assert ".nav-item{" in _THEME_CSS
+
+    def test_nav_item_hover_electric(self):
+        assert ".nav-item:hover{" in _THEME_CSS
+        assert "var(--electric)" in _THEME_CSS
+
+
+class TestExecKpiCSS:
+    def test_exec_kpi_row_exists(self):
+        assert ".exec-kpi-row{" in _THEME_CSS
+
+    def test_exec_kpi_exists(self):
+        assert ".exec-kpi{" in _THEME_CSS
+
+    def test_exec_kpi_val_exists(self):
+        assert ".exec-kpi-val{" in _THEME_CSS
+
+    def test_exec_kpi_lbl_exists(self):
+        assert ".exec-kpi-lbl{" in _THEME_CSS
+
+    def test_prose_exists(self):
+        assert ".prose{" in _THEME_CSS
+
+    def test_deliverables_exists(self):
+        assert ".deliverables" in _THEME_CSS
+
+    def test_smooth_scrolling(self):
+        assert "scroll-behavior:smooth" in _THEME_CSS
+
+
 class TestCoverPage:
     def test_cover_css_exists(self):
         assert ".cover{" in _THEME_CSS
@@ -266,6 +311,43 @@ class TestCoverPage:
         assert "meta-label" in html
         assert "Confidential" in html
 
+    def test_themed_report_has_sticky_nav(self):
+        from sov.report import build_themed_report
+        html = build_themed_report(
+            scope={"name": "T", "brand_label": "TestBrand",
+                   "category_value": "TestCat", "level": "category",
+                   "cid": "t", "extras": {}}, ins={}, d={})
+        assert 'class="sticky-nav"' in html
+        assert 'class="nav-item"' in html
+        assert 'href="#exec"' in html
+        assert 'href="#win"' in html
+
+    def test_themed_report_has_exec_summary(self):
+        from sov.report import build_themed_report
+        html = build_themed_report(
+            scope={"name": "T", "brand_label": "TestBrand",
+                   "category_value": "TestCat", "level": "category",
+                   "cid": "t", "extras": {}},
+            ins={"verdict": "TestBrand leads TestCat."},
+            d={"hero": {"your_sov": 25.5, "rank": 2,
+                        "organic": 15.0, "paid": 10.5}})
+        assert 'id="exec"' in html
+        assert "Executive Summary" in html
+        assert "exec-kpi-row" in html
+        assert "25.5%" in html
+        assert "#2" in html
+        assert "TestBrand leads TestCat." in html
+
+    def test_themed_report_uses_section_header(self):
+        from sov.report import build_themed_report
+        html = build_themed_report(
+            scope={"name": "T", "brand_label": "TestBrand",
+                   "category_value": "TestCat", "level": "category",
+                   "cid": "t", "extras": {}}, ins={}, d={})
+        assert "section-header" in html
+        assert "section-num" in html
+        assert "section-title" in html
+
 
 class TestGoogleFontsLinks:
     _SCOPE = {"name": "Test", "brand_label": "TestBrand",
@@ -291,6 +373,64 @@ class TestGoogleFontsLinks:
         assert "DM+Mono" in html
         assert "Hanken+Grotesk" not in html
 
+    def test_category_report_has_sticky_nav(self):
+        from sov.report import build_category_report
+
+        html = build_category_report(
+            scope=self._SCOPE, ins={}, d={
+                "leaderboard": [{"brand": "A", "combined_sov": 10,
+                                 "organic_pts": 5, "paid_pts": 5,
+                                 "is_focus": False}],
+                "keywords": [{"kw": "term", "crawls": 100}],
+            })
+        assert 'class="sticky-nav"' in html
+        assert 'class="nav-item"' in html
+        assert 'href="#exec"' in html
+        assert 'href="#lb"' in html
+        assert 'href="#kws"' in html
+        assert 'href="#win"' in html
+
+    def test_category_report_has_exec_summary(self):
+        from sov.report import build_category_report
+
+        html = build_category_report(
+            scope=self._SCOPE,
+            ins={"verdict": "BrandX leads Cat with 30.0% SOV."},
+            d={"hero": {"top_brand": "BrandX", "top_sov": 30.0,
+                        "brands": 8, "keywords": 50}})
+        assert 'id="exec"' in html
+        assert "Executive Summary" in html
+        assert "exec-kpi-row" in html
+        assert "BrandX" in html
+        assert "30.0%" in html
+        assert "BrandX leads Cat" in html
+
+    def test_category_report_has_section_ids(self):
+        from sov.report import build_category_report
+
+        html = build_category_report(
+            scope=self._SCOPE, ins={}, d={
+                "leaderboard": [{"brand": "A", "combined_sov": 10,
+                                 "organic_pts": 5, "paid_pts": 5,
+                                 "is_focus": False}],
+                "subcats": [{"sub": "S1", "leader": "A",
+                             "leader_sov": 10.0}],
+                "keywords": [{"kw": "term", "crawls": 100}],
+            })
+        assert 'id="lb"' in html
+        assert 'id="subcats"' in html
+        assert 'id="kws"' in html
+        assert 'id="win"' in html
+
+    def test_category_report_uses_section_header(self):
+        from sov.report import build_category_report
+
+        html = build_category_report(
+            scope=self._SCOPE, ins={}, d={})
+        assert "section-header" in html
+        assert "section-num" in html
+        assert "section-title" in html
+
     def test_incrementality_report_loads_dm_fonts(self):
         from sov.report import build_incrementality_report
 
@@ -299,3 +439,20 @@ class TestGoogleFontsLinks:
         assert "DM+Sans" in html
         assert "DM+Mono" in html
         assert "Hanken+Grotesk" not in html
+
+
+class TestIncrementalityHidden:
+    """Verify that the Incrementality option is removed from the UI."""
+
+    def test_app_radio_excludes_incrementality(self):
+        """The st.radio call in app.py should not offer Incrementality."""
+        import pathlib
+        app_src = pathlib.Path("app.py").read_text()
+        assert "📈 Incrementality" not in app_src, \
+            "Incrementality should be hidden from the st.radio options"
+
+    def test_is_incr_mode_always_false(self):
+        """is_incr_mode must be hardcoded to False."""
+        import pathlib
+        app_src = pathlib.Path("app.py").read_text()
+        assert "is_incr_mode = False" in app_src
