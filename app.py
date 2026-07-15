@@ -542,6 +542,8 @@ def _build_deepdive(start, end):
     ws = transforms.top_keywords(kb, top_n, mtype, cutoff, "opportunity", focus_brand)
     # Low-SOV candidates (<2% SOV): fetch real search volume, filter out
     # zero-volume terms, and rank by volume descending.
+    # If the volume table returns nothing (no data / sample mode), fall back
+    # to crawl-based ranking so the section always appears when candidates exist.
     zsv = transforms.zero_sov_keywords(kb, 200, mtype, cutoff, focus_brand,
                                        sov_threshold=2.0)
     if not zsv.empty:
@@ -549,11 +551,19 @@ def _build_deepdive(start, end):
         if not vol.empty:
             zsv = zsv.merge(vol, on="search_term", how="left")
             zsv["search_volume"] = zsv["search_volume"].fillna(0).astype(int)
+            vol_filtered = zsv[zsv["search_volume"] > 0]
+            if not vol_filtered.empty:
+                zsv = (vol_filtered
+                       .sort_values("search_volume", ascending=False)
+                       .reset_index(drop=True))
+            else:
+                # Volume data present but none matched — fall back to crawls
+                zsv["search_volume"] = 0
+                zsv = zsv.sort_values("crawls", ascending=False).reset_index(drop=True)
         else:
+            # Volume table returned nothing — fall back to crawls
             zsv["search_volume"] = 0
-        zsv = (zsv[zsv["search_volume"] > 0]
-               .sort_values("search_volume", ascending=False)
-               .reset_index(drop=True))
+            zsv = zsv.sort_values("crawls", ascending=False).reset_index(drop=True)
     cov = transforms.coverage(kb, mtype, cutoff, focus_brand)
 
     frow = cl[cl["is_client"]]

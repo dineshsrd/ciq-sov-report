@@ -244,14 +244,22 @@ class TestZeroSovVolumeMerge:
 
     def _merge(self, zsv_df: pd.DataFrame,
                vol_df: pd.DataFrame) -> pd.DataFrame:
-        """Replicate the merge logic from app._build_deepdive."""
-        if not zsv_df.empty and not vol_df.empty:
-            zsv_df = zsv_df.merge(vol_df, on="search_term", how="left")
-            zsv_df["search_volume"] = zsv_df["search_volume"].fillna(0).astype(int)
-            zsv_df = zsv_df.sort_values("search_volume", ascending=False
-                                        ).reset_index(drop=True)
-        else:
-            zsv_df["search_volume"] = 0
+        """Replicate the full merge + fallback logic from app._build_deepdive."""
+        if not zsv_df.empty:
+            if not vol_df.empty:
+                zsv_df = zsv_df.merge(vol_df, on="search_term", how="left")
+                zsv_df["search_volume"] = zsv_df["search_volume"].fillna(0).astype(int)
+                vol_filtered = zsv_df[zsv_df["search_volume"] > 0]
+                if not vol_filtered.empty:
+                    zsv_df = (vol_filtered
+                              .sort_values("search_volume", ascending=False)
+                              .reset_index(drop=True))
+                else:
+                    zsv_df["search_volume"] = 0
+                    zsv_df = zsv_df.sort_values("crawls", ascending=False).reset_index(drop=True)
+            else:
+                zsv_df["search_volume"] = 0
+                zsv_df = zsv_df.sort_values("crawls", ascending=False).reset_index(drop=True)
         return zsv_df
 
     def test_sorts_by_search_volume_descending(self):
@@ -269,7 +277,9 @@ class TestZeroSovVolumeMerge:
         assert result.iloc[1]["search_term"] == "c"
         assert result.iloc[2]["search_term"] == "a"
 
-    def test_missing_keyword_gets_zero_volume(self):
+    def test_keyword_with_no_volume_is_excluded_when_others_have_volume(self):
+        """When volume data is returned and some keywords have 0, they are dropped
+        (zero-volume terms are not worth showing when real data is available)."""
         zsv = pd.DataFrame({
             "search_term": ["a", "b"],
             "crawls": [100.0, 200.0],
@@ -280,19 +290,37 @@ class TestZeroSovVolumeMerge:
             "search_volume": [3000],
         })
         result = self._merge(zsv, vol)
-        b_row = result[result["search_term"] == "b"]
-        assert int(b_row["search_volume"].iloc[0]) == 0
+        # "a" has volume and should appear; "b" has 0 and should be dropped
+        assert "a" in result["search_term"].tolist()
+        assert "b" not in result["search_term"].tolist()
 
-    def test_empty_volume_sets_zero_column(self):
+    def test_empty_volume_falls_back_to_crawls(self):
+        """When volume table returns nothing, keywords still appear ranked by crawls."""
         zsv = pd.DataFrame({
-            "search_term": ["a"],
-            "crawls": [100.0],
-            "intensity": [1.0],
+            "search_term": ["a", "b"],
+            "crawls": [50.0, 200.0],
+            "intensity": [1.0, 2.0],
         })
         vol = pd.DataFrame(columns=["search_term", "search_volume"])
         result = self._merge(zsv, vol)
+        assert not result.empty, "section must never be hidden due to missing volume data"
         assert "search_volume" in result.columns
-        assert int(result["search_volume"].iloc[0]) == 0
+        assert result.iloc[0]["search_term"] == "b"  # higher crawls first
+
+    def test_all_zero_volume_falls_back_to_crawls(self):
+        """When volume is returned but all values are 0, fall back to crawls."""
+        zsv = pd.DataFrame({
+            "search_term": ["a", "b"],
+            "crawls": [50.0, 200.0],
+            "intensity": [1.0, 2.0],
+        })
+        vol = pd.DataFrame({
+            "search_term": ["a", "b"],
+            "search_volume": [0, 0],
+        })
+        result = self._merge(zsv, vol)
+        assert not result.empty, "section must never be hidden due to zero volume"
+        assert result.iloc[0]["search_term"] == "b"  # higher crawls first
 
     def test_volume_preserved_in_themed_dict(self):
         zsv = pd.DataFrame({
