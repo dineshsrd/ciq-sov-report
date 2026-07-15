@@ -540,15 +540,20 @@ def _build_deepdive(start, end):
     cl = transforms.combined_leaderboard(brandagg, cutoff, focus_brand, top=15)
     kp = transforms.keyword_positioning(kb, top_n, mtype, cutoff, focus_brand)
     ws = transforms.top_keywords(kb, top_n, mtype, cutoff, "opportunity", focus_brand)
-    zsv = transforms.zero_sov_keywords(kb, top_n, mtype, cutoff, focus_brand)
+    # Low-SOV candidates (<2% SOV): fetch real search volume, filter out
+    # zero-volume terms, and rank by volume descending.
+    zsv = transforms.zero_sov_keywords(kb, 200, mtype, cutoff, focus_brand,
+                                       sov_threshold=2.0)
     if not zsv.empty:
         vol = _search_vol(tuple(zsv["search_term"].tolist()), start, end)
         if not vol.empty:
             zsv = zsv.merge(vol, on="search_term", how="left")
             zsv["search_volume"] = zsv["search_volume"].fillna(0).astype(int)
-            zsv = zsv.sort_values("search_volume", ascending=False).reset_index(drop=True)
         else:
             zsv["search_volume"] = 0
+        zsv = (zsv[zsv["search_volume"] > 0]
+               .sort_values("search_volume", ascending=False)
+               .reset_index(drop=True))
     cov = transforms.coverage(kb, mtype, cutoff, focus_brand)
 
     frow = cl[cl["is_client"]]
@@ -631,8 +636,9 @@ def _build_deepdive(start, end):
         "whitespace": [{"kw": r["search_term"], "your_sov": float(r["client_sov"]),
                         "crawls": float(r["crawls"])} for _, r in ws.head(10).iterrows()],
         "zero_sov": [{"kw": r["search_term"], "crawls": float(r["crawls"]),
-                      "volume": int(r.get("search_volume", 0))}
-                     for _, r in zsv.head(10).iterrows()],
+                      "volume": int(r.get("search_volume", 0)),
+                      "client_sov": round(float(r.get("client_sov", 0)), 2)}
+                     for _, r in zsv.head(15).iterrows()],
     }
     if sku_opt_block:
         themed["sku_opt"] = sku_opt_block

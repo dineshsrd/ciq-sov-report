@@ -1039,9 +1039,9 @@ def build_themed_report(scope: dict, ins: dict, d: dict,
         else:
             _zero_body = _kwlines(_zsov, "crawls", "crawls", "searches", fmt="count")
         secs.append(_section(
-            f"{n:02d}", "Top Missed Opportunities — Zero SOV",
-            ins.get("zero_sov", "Highest-volume searches where you currently have "
-                                 "no organic or paid presence at all."),
+            f"{n:02d}", "Top Missed Opportunities — Low SOV Keywords",
+            ins.get("zero_sov", "Highest-volume searches where you have less than "
+                                 "2% share — the biggest gaps to close."),
             _zero_body,
             section_id=sid))
         n += 1

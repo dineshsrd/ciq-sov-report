@@ -113,26 +113,35 @@ def top_keywords(df: pd.DataFrame, n: int = 10, mtype: str = "all",
     return kw.sort_values(sort_col, ascending=False).head(n).reset_index(drop=True)[cols]
 
 
-# ── Zero-SOV keywords, ranked by raw search volume ────────────────────────
-def zero_sov_keywords(df: pd.DataFrame, n: int = 10, mtype: str = "all",
+# ── Low-SOV keywords — missed & underperforming opportunities ──────────────
+def zero_sov_keywords(df: pd.DataFrame, n: int = 200, mtype: str = "all",
                       cutoff: str = "page_1",
-                      focus_brand: str | None = None) -> pd.DataFrame:
-    """Keywords where the focus brand has ZERO share, ranked by crawl volume
-    (search demand) rather than a blended opportunity score. These are the
-    biggest missed opportunities: real search volume the brand doesn't win
-    on at all."""
-    cols = ["search_term", "crawls", "intensity"]
+                      focus_brand: str | None = None,
+                      sov_threshold: float = 2.0) -> pd.DataFrame:
+    """Keywords where the focus brand has less than ``sov_threshold``% SOV
+    (default 2 %), ranked by crawl volume.
+
+    Returns up to ``n`` candidates — the caller is expected to enrich with
+    real search volume, filter to volume > 0, and cap to a display limit.
+    ``client_sov`` is included in the output so the caller can build a
+    combined ranking or display it alongside volume.
+    """
+    cols = ["search_term", "crawls", "intensity", "client_sov"]
     if df.empty:
         return pd.DataFrame(columns=cols)
     num = numerator_col(mtype, cutoff)
+    den = denominator_col(mtype, cutoff)
     crawls = _per_keyword(df, "no_of_crawls", "max")
-    intensity = _per_keyword(df, denominator_col(mtype, cutoff), "max")
+    intensity = _per_keyword(df, den, "max")
     client_cnt = df[_focus_mask(df, focus_brand)].groupby("search_term")[num].sum()
     kw = pd.DataFrame({"crawls": crawls, "intensity": intensity,
                        "client_count": client_cnt}).fillna(0.0)
-    kw = kw[kw["client_count"] == 0]
-    kw = kw.reset_index()
-    return kw.sort_values("crawls", ascending=False).head(n).reset_index(drop=True)[cols]
+    kw["client_sov"] = (100.0 * kw["client_count"]
+                        / kw["intensity"].replace(0, float("nan"))).fillna(0.0)
+    kw = kw[kw["client_sov"] < sov_threshold].reset_index()
+    return (kw.sort_values("crawls", ascending=False)
+              .head(n)
+              .reset_index(drop=True)[cols])
 
 
 # ── Keyword positioning (where the brand ranks per keyword) ──────────────

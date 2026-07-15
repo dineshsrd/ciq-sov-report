@@ -172,6 +172,73 @@ class TestGetSearchTermVolumeLiveMode:
 
 # ── Merge logic tests ────────────────────────────────────────────────────────
 
+class TestLowSovTransform:
+    """Tests for the updated zero_sov_keywords transform (< 2% SOV)."""
+
+    def _make_kb(self, terms_sov: dict[str, float]) -> "pd.DataFrame":
+        """Build a minimal kb DataFrame with controllable per-keyword SOV."""
+        import pandas as pd
+        rows = []
+        for term, sov_pct in terms_sov.items():
+            total = 100
+            client_count = total * sov_pct / 100
+            rows.append({
+                "search_term": term,
+                "brand": "TestBrand",
+                "client_flag": "client",
+                "keyword_type": "generic",
+                "no_of_crawls": 100.0,
+                "all_page_1_count": client_count,
+                "total_all_page_1_count": float(total),
+            })
+        return pd.DataFrame(rows)
+
+    def test_includes_zero_sov_keywords(self):
+        from sov.transforms import zero_sov_keywords
+        kb = self._make_kb({"blender": 0.0, "juicer": 5.0})
+        result = zero_sov_keywords(kb, focus_brand="TestBrand")
+        assert "blender" in result["search_term"].tolist()
+
+    def test_includes_low_sov_below_threshold(self):
+        from sov.transforms import zero_sov_keywords
+        kb = self._make_kb({"blender": 1.5, "juicer": 5.0})
+        result = zero_sov_keywords(kb, focus_brand="TestBrand")
+        assert "blender" in result["search_term"].tolist()
+        assert "juicer" not in result["search_term"].tolist()
+
+    def test_excludes_keywords_above_threshold(self):
+        from sov.transforms import zero_sov_keywords
+        kb = self._make_kb({"blender": 2.0, "juicer": 3.0})
+        result = zero_sov_keywords(kb, focus_brand="TestBrand")
+        assert result.empty
+
+    def test_output_has_client_sov_column(self):
+        from sov.transforms import zero_sov_keywords
+        kb = self._make_kb({"blender": 0.0})
+        result = zero_sov_keywords(kb, focus_brand="TestBrand")
+        assert "client_sov" in result.columns
+
+    def test_client_sov_value_correct(self):
+        from sov.transforms import zero_sov_keywords
+        kb = self._make_kb({"blender": 1.5})
+        result = zero_sov_keywords(kb, focus_brand="TestBrand")
+        assert not result.empty
+        assert abs(result.iloc[0]["client_sov"] - 1.5) < 0.01
+
+    def test_custom_threshold(self):
+        from sov.transforms import zero_sov_keywords
+        kb = self._make_kb({"blender": 3.0, "juicer": 5.0})
+        result = zero_sov_keywords(kb, focus_brand="TestBrand", sov_threshold=4.0)
+        assert "blender" in result["search_term"].tolist()
+        assert "juicer" not in result["search_term"].tolist()
+
+    def test_empty_df_returns_correct_columns(self):
+        from sov.transforms import zero_sov_keywords
+        import pandas as pd
+        result = zero_sov_keywords(pd.DataFrame(), focus_brand="TestBrand")
+        assert list(result.columns) == ["search_term", "crawls", "intensity", "client_sov"]
+
+
 class TestZeroSovVolumeMerge:
     """Unit tests for the merge+sort logic used in _build_deepdive."""
 
@@ -232,15 +299,19 @@ class TestZeroSovVolumeMerge:
             "search_term": ["blender", "juicer"],
             "crawls": [100.0, 200.0],
             "intensity": [10.0, 20.0],
+            "client_sov": [0.0, 1.5],
             "search_volume": [50000, 30000],
         })
         themed_zero_sov = [
             {"kw": r["search_term"], "crawls": float(r["crawls"]),
-             "volume": int(r.get("search_volume", 0))}
-            for _, r in zsv.head(10).iterrows()
+             "volume": int(r.get("search_volume", 0)),
+             "client_sov": round(float(r.get("client_sov", 0)), 2)}
+            for _, r in zsv.head(15).iterrows()
         ]
         assert themed_zero_sov[0]["volume"] == 50000
         assert themed_zero_sov[1]["volume"] == 30000
+        assert themed_zero_sov[0]["client_sov"] == 0.0
+        assert themed_zero_sov[1]["client_sov"] == 1.5
 
 
 # ── Report renderer tests ────────────────────────────────────────────────────
@@ -282,12 +353,12 @@ class TestZeroSovReportRendering:
         ])
         assert "searches" in html
 
-    def test_section_title_unchanged(self):
+    def test_section_title_low_sov(self):
         html = self._render([
             {"kw": "blender", "crawls": 100.0, "volume": 50000},
         ])
         assert "Top Missed Opportunities" in html
-        assert "Zero SOV" in html
+        assert "Low SOV" in html
 
     def test_keyword_name_appears(self):
         html = self._render([
