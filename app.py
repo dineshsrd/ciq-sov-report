@@ -79,6 +79,15 @@ def _kb(cid, level, catval, start, end):
     return data.get_keyword_brand_agg(cid, level, catval, start, end)
 
 
+@st.cache_data(show_spinner="Pulling search volume data…")
+def _search_vol(keywords: tuple[str, ...], start, end):
+    """Cached wrapper for get_search_term_volume.
+
+    Keywords are passed as a tuple (hashable) so st.cache_data can cache on it.
+    """
+    return data.get_search_term_volume(list(keywords), start, end)
+
+
 @st.cache_data(show_spinner="Computing relevant-set SOV…")
 def _relset(cid, level, catval, start, end, mtype, cutoff, fbrand):
     return data.get_relevant_set_leaderboard(cid, level, catval, start, end,
@@ -532,6 +541,14 @@ def _build_deepdive(start, end):
     kp = transforms.keyword_positioning(kb, top_n, mtype, cutoff, focus_brand)
     ws = transforms.top_keywords(kb, top_n, mtype, cutoff, "opportunity", focus_brand)
     zsv = transforms.zero_sov_keywords(kb, top_n, mtype, cutoff, focus_brand)
+    if not zsv.empty:
+        vol = _search_vol(tuple(zsv["search_term"].tolist()), start, end)
+        if not vol.empty:
+            zsv = zsv.merge(vol, on="search_term", how="left")
+            zsv["search_volume"] = zsv["search_volume"].fillna(0).astype(int)
+            zsv = zsv.sort_values("search_volume", ascending=False).reset_index(drop=True)
+        else:
+            zsv["search_volume"] = 0
     cov = transforms.coverage(kb, mtype, cutoff, focus_brand)
 
     frow = cl[cl["is_client"]]
@@ -613,7 +630,8 @@ def _build_deepdive(start, end):
                     if leaders is not None else []),
         "whitespace": [{"kw": r["search_term"], "your_sov": float(r["client_sov"]),
                         "crawls": float(r["crawls"])} for _, r in ws.head(10).iterrows()],
-        "zero_sov": [{"kw": r["search_term"], "crawls": float(r["crawls"])}
+        "zero_sov": [{"kw": r["search_term"], "crawls": float(r["crawls"]),
+                      "volume": int(r.get("search_volume", 0))}
                      for _, r in zsv.head(10).iterrows()],
     }
     if sku_opt_block:
@@ -939,10 +957,8 @@ elif rep.get("mode") == "incrementality":
     st.info(f"📈 **Incrementality Report** — {rep['scope'].get('brand_label','')} · "
             f"{rep['scope'].get('date_min','')} → {rep['scope'].get('date_max','')}")
 
-import tempfile as _tempfile, pathlib as _pathlib
-_tf = _pathlib.Path(_tempfile.gettempdir()) / "ciq_report_preview.html"
-_tf.write_text(rep["html"], encoding="utf-8")
-st.iframe(str(_tf), height=5200)
+import streamlit.components.v1 as _components
+_components.html(rep["html"], height=5200, scrolling=True)
 
 if rep.get("mode") not in ("history", "category") and "kp" in rep:
     with st.expander("🛒 Product shelf — see the products winning a keyword"):

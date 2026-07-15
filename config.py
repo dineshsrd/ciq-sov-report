@@ -88,3 +88,6 @@ TBL_SKU = "sov_search_term_sku_mapping_data_post_output"
 # Ad incrementality / efficiency (different schema)
 SCHEMA_ARAMUS = "aramus_ds"
 TBL_INCR = "search_incrementality_report"
+# Search term volume — always in common_catalog.aramus_ds regardless of env
+CATALOG_COMMON = "common_catalog"
+TBL_SEARCH_VOLUME = "search_term_volume"

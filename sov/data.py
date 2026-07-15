@@ -854,6 +854,36 @@ def get_region_share(client_id: int, level: str | None,
     return df.fillna(0.0)
 
 
+def get_search_term_volume(keywords: list[str], start: dt.date, end: dt.date,
+                           retailer_id: int = 4) -> pd.DataFrame:
+    """Return predicted search volume for the given keywords over a date range.
+
+    Queries ``common_catalog.aramus_ds.search_term_volume`` using an IN-clause
+    on the supplied keywords so only relevant rows are fetched from Databricks.
+
+    Returns a DataFrame with columns [search_term, search_volume].
+    In sample mode (or when keywords is empty) returns an empty DataFrame with
+    those columns so callers can always merge safely.
+    """
+    empty = pd.DataFrame(columns=["search_term", "search_volume"])
+    if not keywords:
+        return empty
+    if SETTINGS.is_live:
+        from . import queries
+        params = {"s": str(start), "e": str(end), "rid": int(retailer_id)}
+        query = queries.search_term_volume_query(keywords)
+        print(query)
+        print(params)
+        df = _run(query, params=params)
+        if df.empty or "search_term" not in df.columns:
+            return empty
+        df["search_volume"] = pd.to_numeric(
+            df.get("search_volume", 0), errors="coerce"
+        ).fillna(0).astype(int)
+        return df[["search_term", "search_volume"]].reset_index(drop=True)
+    return empty
+
+
 # ── Sample helpers ───────────────────────────────────────────────────────
 def _sample_raw(client_id, level, category_value, start, end) -> pd.DataFrame:
     perf = sample_data.performance()

@@ -10,8 +10,9 @@ allowlists, so there is no injection surface.
 """
 from __future__ import annotations
 
-from config import (SCHEMA_ARAMUS, SETTINGS, TBL_INCR, TBL_METADATA,
-                    TBL_PERFORMANCE, TBL_SKU)
+from config import (CATALOG_COMMON, SCHEMA_ARAMUS, SETTINGS, TBL_INCR,
+                    TBL_METADATA, TBL_PERFORMANCE, TBL_SKU,
+                    TBL_SEARCH_VOLUME)
 
 from .metrics import (CATEGORY_LEVELS, denominator_col, numerator_col,
                       numerator_columns, total_columns)
@@ -157,6 +158,41 @@ def date_bounds_query() -> str:
 # ── Ad Incrementality & Efficiency (aramus_ds.search_incrementality_report) ─
 def _I() -> str:
     return SETTINGS.qualified(SCHEMA_ARAMUS, TBL_INCR)
+
+
+# ── Search Term Volume (common_catalog.aramus_ds.search_term_volume) ──────────
+def _V() -> str:
+    """Always common_catalog.aramus_ds — not controlled by DATABRICKS_CATALOG."""
+    return f"{CATALOG_COMMON}.{SCHEMA_ARAMUS}.{TBL_SEARCH_VOLUME}"
+
+
+def search_term_volume_query(keywords: list[str]) -> str:
+    """Average monthly predicted_volume for a specific set of keywords.
+
+    Divides the total predicted_volume by the number of distinct calendar months
+    in the date range so the result is a per-month figure regardless of whether
+    the caller selects 1 month, 3 months, or 6 months.
+
+    Keywords are interpolated into an IN-clause (safe — values come from our
+    own DB, not raw user input).
+
+    Params: :s (start date), :e (end date), :rid (retailer_id, Amazon US = 4)
+    """
+    if not keywords:
+        raise ValueError("keywords must not be empty")
+    quoted = ", ".join(f"'{kw.replace(chr(39), chr(39)*2)}'" for kw in keywords)
+    return f"""
+SELECT search_term,
+       CAST(
+           SUM(predicted_volume)
+           / NULLIF(COUNT(DISTINCT DATE_TRUNC('month', feed_date)), 0)
+       AS BIGINT) AS search_volume
+FROM {_V()}
+WHERE feed_date BETWEEN :s AND :e
+  AND retailer_id = :rid
+  AND search_term IN ({quoted})
+GROUP BY search_term
+""".strip()
 
 
 def _incr_cte(level: str | None) -> str:

@@ -1031,11 +1031,18 @@ def build_themed_report(scope: dict, ins: dict, d: dict,
     if d.get("zero_sov"):
         sid = "zero"
         nav_entries.append((sid, "Missed Opportunities"))
+        _zsov = d["zero_sov"]
+        _has_volume = any(row.get("volume", 0) > 0 for row in _zsov)
+        if _has_volume:
+            _zero_body = _kwlines(_zsov, "volume", "volume",
+                                  "avg. monthly searches", fmt="count")
+        else:
+            _zero_body = _kwlines(_zsov, "crawls", "crawls", "searches", fmt="count")
         secs.append(_section(
             f"{n:02d}", "Top Missed Opportunities — Zero SOV",
             ins.get("zero_sov", "Highest-volume searches where you currently have "
                                  "no organic or paid presence at all."),
-            _kwlines(d["zero_sov"], "crawls", "crawls", "searches", fmt="count"),
+            _zero_body,
             section_id=sid))
         n += 1
     if d.get("sku_opt") and d["sku_opt"].get("card"):
