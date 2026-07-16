@@ -622,6 +622,61 @@ def _kwlines(lines: list[dict], by: str, val_key: str, suffix: str,
     return "".join(rows)
 
 
+def _low_sov_kwlines(lines: list[dict], use_volume: bool) -> str:
+    """Table view for the Low-SOV Opportunities section.
+
+    Columns: # | Keyword | SOV | Search Volume (avg/month)
+    """
+    if not lines:
+        return ""
+    metric_key = "volume" if use_volume else "crawls"
+    vol_header = "Avg. Monthly Searches" if use_volume else "Crawl Volume"
+
+    th_style = (
+        "padding:10px 16px;text-align:left;font-size:11px;letter-spacing:.06em;"
+        "text-transform:uppercase;color:var(--muted2);font-family:var(--mono);"
+        "border-bottom:2px solid var(--line);background:var(--bg);white-space:nowrap"
+    )
+    td_style = (
+        "padding:11px 16px;border-bottom:1px solid var(--line);"
+        "font-size:14px;color:var(--ink);vertical-align:middle"
+    )
+    num_td = td_style + ";font-family:var(--mono);color:var(--muted2);width:36px;text-align:right"
+    vol_td = td_style + ";font-family:var(--mono);font-weight:600;text-align:right;white-space:nowrap"
+
+    html_parts = [
+        '<div class="subcard wide" style="padding:0;overflow:hidden">',
+        '<table style="width:100%;border-collapse:collapse">',
+        '<thead><tr>',
+        f'<th style="{th_style};width:36px;text-align:right">#</th>',
+        f'<th style="{th_style}">Keyword</th>',
+        f'<th style="{th_style};text-align:center">SOV</th>',
+        f'<th style="{th_style};text-align:right">{_html.escape(vol_header)}</th>',
+        '</tr></thead><tbody>',
+    ]
+
+    for i, l in enumerate(lines, 1):
+        sov = float(l.get("client_sov", 0))
+        sov_txt = "0%" if sov == 0 else f"{sov:.2f}%"
+        sov_color = "var(--status-red-bg)" if sov == 0 else "var(--status-amber-bg)"
+        row_bg = "background:var(--paper)" if i % 2 == 0 else ""
+        val = l.get(metric_key, 0)
+        html_parts.append(
+            f'<tr style="{row_bg}">'
+            f'<td style="{num_td}">{i}</td>'
+            f'<td style="{td_style};font-weight:500">{_html.escape(str(l["kw"]))}</td>'
+            f'<td style="{td_style};text-align:center">'
+            f'<span style="background:{sov_color};color:#fff;border-radius:4px;'
+            f'padding:2px 9px;font-size:12px;font-family:var(--mono);'
+            f'white-space:nowrap">{sov_txt}</span></td>'
+            f'<td style="{vol_td}">{val:,.0f}</td>'
+            f'</tr>'
+        )
+
+    html_parts.append('</tbody></table></div>')
+    return "".join(html_parts)
+
+
 def _inc_lines(lines: list[dict]) -> str:
     if not lines:
         return ""
@@ -1033,11 +1088,7 @@ def build_themed_report(scope: dict, ins: dict, d: dict,
         nav_entries.append((sid, "Missed Opportunities"))
         _zsov = d["zero_sov"]
         _has_volume = any(row.get("volume", 0) > 0 for row in _zsov)
-        if _has_volume:
-            _zero_body = _kwlines(_zsov, "volume", "volume",
-                                  "avg. monthly searches", fmt="count")
-        else:
-            _zero_body = _kwlines(_zsov, "crawls", "crawls", "searches", fmt="count")
+        _zero_body = _low_sov_kwlines(_zsov, use_volume=_has_volume)
         secs.append(_section(
             f"{n:02d}", "Top Missed Opportunities — Low SOV Keywords",
             ins.get("zero_sov", "Highest-volume searches where you have less than "

@@ -361,35 +361,84 @@ class TestZeroSovReportRendering:
 
     def test_uses_volume_when_present(self):
         html = self._render([
-            {"kw": "blender", "crawls": 100.0, "volume": 50000},
-            {"kw": "juicer", "crawls": 80.0, "volume": 30000},
+            {"kw": "blender", "crawls": 100.0, "volume": 50000, "client_sov": 0.0},
+            {"kw": "juicer", "crawls": 80.0, "volume": 30000, "client_sov": 1.2},
         ])
-        assert "avg. monthly searches" in html
+        assert "Avg. Monthly Searches" in html
         assert "50,000" in html
 
     def test_falls_back_to_crawls_when_no_volume(self):
         html = self._render([
-            {"kw": "blender", "crawls": 100.0, "volume": 0},
-            {"kw": "juicer", "crawls": 80.0, "volume": 0},
+            {"kw": "blender", "crawls": 100.0, "volume": 0, "client_sov": 0.0},
+            {"kw": "juicer", "crawls": 80.0, "volume": 0, "client_sov": 1.5},
         ])
-        assert "searches" in html
-        assert "avg. monthly" not in html
+        assert "Crawl Volume" in html
+        assert "Avg. Monthly" not in html
 
     def test_falls_back_when_volume_key_missing(self):
         html = self._render([
             {"kw": "blender", "crawls": 100.0},
         ])
-        assert "searches" in html
+        assert "Crawl Volume" in html or "Avg. Monthly" in html
+
+    def test_renders_as_table(self):
+        html = self._render([
+            {"kw": "blender", "crawls": 100.0, "volume": 50000, "client_sov": 0.0},
+        ])
+        assert "<table" in html
+        assert "<thead" in html
+        assert "<tbody" in html
+        assert "<th" in html
+        assert "<td" in html
+
+    def test_table_has_keyword_column_header(self):
+        html = self._render([
+            {"kw": "blender", "crawls": 100.0, "volume": 50000, "client_sov": 0.0},
+        ])
+        assert "Keyword" in html
+
+    def test_table_has_sov_column_header(self):
+        html = self._render([
+            {"kw": "blender", "crawls": 100.0, "volume": 50000, "client_sov": 0.0},
+        ])
+        assert ">SOV<" in html
+
+    def test_shows_sov_chip_for_each_keyword(self):
+        html = self._render([
+            {"kw": "blender", "crawls": 100.0, "volume": 50000, "client_sov": 0.0},
+            {"kw": "juicer", "crawls": 80.0, "volume": 30000, "client_sov": 1.5},
+        ])
+        assert "0%" in html
+        assert "1.50%" in html
+
+    def test_zero_sov_chip_uses_red(self):
+        html = self._render([
+            {"kw": "blender", "crawls": 100.0, "volume": 50000, "client_sov": 0.0},
+        ])
+        assert "status-red-bg" in html
+
+    def test_nonzero_sov_chip_uses_amber(self):
+        html = self._render([
+            {"kw": "juicer", "crawls": 80.0, "volume": 30000, "client_sov": 1.5},
+        ])
+        assert "status-amber-bg" in html
 
     def test_section_title_low_sov(self):
         html = self._render([
-            {"kw": "blender", "crawls": 100.0, "volume": 50000},
+            {"kw": "blender", "crawls": 100.0, "volume": 50000, "client_sov": 0.0},
         ])
         assert "Top Missed Opportunities" in html
         assert "Low SOV" in html
 
     def test_keyword_name_appears(self):
         html = self._render([
-            {"kw": "blender", "crawls": 100.0, "volume": 50000},
+            {"kw": "blender", "crawls": 100.0, "volume": 50000, "client_sov": 0.0},
         ])
         assert "blender" in html
+
+    def test_max_ten_keywords_shown(self):
+        rows = [{"kw": f"kw{i}", "crawls": float(100 - i),
+                 "volume": 10000 - i * 100, "client_sov": 0.0}
+                for i in range(10)]
+        html = self._render(rows)
+        assert html.count("<tr") == 11  # 1 header + 10 data rows

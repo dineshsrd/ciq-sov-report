@@ -604,7 +604,7 @@ def _build_deepdive(start, end):
         "subcategory_leaders": (leaders.head(8).to_dict("records")
                                 if leaders is not None else []),
         "top_keywords": ws.to_dict("records"),
-        "zero_sov_keywords": zsv.to_dict("records"),
+        "zero_sov_keywords": zsv.head(10).to_dict("records"),
         "coverage": cov,
     }
     if incr:
@@ -648,7 +648,7 @@ def _build_deepdive(start, end):
         "zero_sov": [{"kw": r["search_term"], "crawls": float(r["crawls"]),
                       "volume": int(r.get("search_volume", 0)),
                       "client_sov": round(float(r.get("client_sov", 0)), 2)}
-                     for _, r in zsv.head(15).iterrows()],
+                     for _, r in zsv.head(10).iterrows()],
     }
     if sku_opt_block:
         themed["sku_opt"] = sku_opt_block
